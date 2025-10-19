@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import inquirer from 'inquirer';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
@@ -27,8 +28,11 @@ export async function get(
 
     if (!filename) {
       Logger.error('Please provide a filename or search query');
-      Logger.info('Usage: tower get <filename>');
-      Logger.info('       tower get "research paper about AI"  (natural language - not implemented)');
+      Logger.info('Usage: tower get <filename> [destination]');
+      Logger.info('Examples:');
+      Logger.info('  tower get "report.pdf"                    # Save to ~/Downloads/');
+      Logger.info('  tower get "report.pdf" ~/Documents/       # Save to directory');
+      Logger.info('  tower get "report.pdf" ./my-report.pdf    # Save with custom name');
       return;
     }
 
@@ -107,7 +111,56 @@ async function downloadFile(
   Logger.info(`Size: ${(fileRecord.size / 1024 / 1024).toFixed(2)} MB`);
 
   // Determine destination path
-  const dest = destination || path.join(os.homedir(), 'Downloads', fileRecord.file_name);
+  let dest: string;
+
+  if (destination) {
+    // Expand ~ to home directory
+    const expandedPath = destination.startsWith('~')
+      ? path.join(os.homedir(), destination.slice(1))
+      : destination;
+
+    // Convert to absolute path
+    const absolutePath = path.isAbsolute(expandedPath)
+      ? expandedPath
+      : path.resolve(process.cwd(), expandedPath);
+
+    // Check if destination is a directory or file path
+    try {
+      const stats = fs.statSync(absolutePath);
+      if (stats.isDirectory()) {
+        // If directory exists, append filename
+        dest = path.join(absolutePath, fileRecord.file_name);
+      } else {
+        // If it's a file, use as-is
+        dest = absolutePath;
+      }
+    } catch (error) {
+      // Path doesn't exist - determine if it's meant to be a directory or file
+      if (absolutePath.endsWith('/') || absolutePath.endsWith(path.sep)) {
+        // Trailing slash means directory - create it and append filename
+        fs.mkdirSync(absolutePath, { recursive: true });
+        dest = path.join(absolutePath, fileRecord.file_name);
+      } else {
+        // Check if it has an extension or looks like a file
+        const dirname = path.dirname(absolutePath);
+        const basename = path.basename(absolutePath);
+
+        // Create parent directory if it doesn't exist
+        if (!fs.existsSync(dirname)) {
+          fs.mkdirSync(dirname, { recursive: true });
+        }
+
+        dest = absolutePath;
+      }
+    }
+  } else {
+    // Default to ~/Downloads/
+    const downloadsDir = path.join(os.homedir(), 'Downloads');
+    if (!fs.existsSync(downloadsDir)) {
+      fs.mkdirSync(downloadsDir, { recursive: true });
+    }
+    dest = path.join(downloadsDir, fileRecord.file_name);
+  }
 
   // Download file via SCP
   Logger.info('Initiating file transfer via SCP...');
