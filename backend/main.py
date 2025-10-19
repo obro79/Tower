@@ -5,6 +5,10 @@ from pathlib import Path
 from datetime import datetime
 from pydantic import BaseModel
 
+import subprocess
+import tempfile
+import shutil
+
 from models import FileRecord, FileSearchResponse
 from database import create_db_and_tables, get_session
 
@@ -60,26 +64,48 @@ def search_files(
     return results
 
 
-@app.get("/files/{file_id}", response_model=FileSearchResponse)
-def get_file_metadata(file_id: int, session: Session = Depends(get_session)):
+@app.get("/files/{file_id}")
+def get_file_metadata(file_id: int, device_ip: str = Query(..., description="IP of the device to download to"), destination_path: str = Query(..., description="Path on the device to download the file to"), device_user: str = Query(..., description="User on the destination device"), session: Session = Depends(get_session)):
     """
-    Get metadata for a specific file by its ID
+    Download a file by its ID to the specified device and path
     
-    This returns the file location info so the CLI can initiate SCP transfer.
+    This performs SCP transfer from the source device to a temp folder, then to the destination.
     
     Parameters:
     - file_id: The database ID of the file
+    - device_ip: IP of the destination device
+    - destination_path: Path on the destination device to download to
+    - device_user: User on the destination device
     
     Returns:
-    - File metadata including device IP and path for SCP retrieval
+    - Success message
     """
     statement = select(FileRecord).where(FileRecord.id == file_id)
     file_record = session.exec(statement).first()
-    
+
     if not file_record:
         raise HTTPException(status_code=404, detail=f"File with ID {file_id} not found")
-    
-    return file_record
+
+    # Create temp directory
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        # SCP from source to temp
+        source = f"{file_record.device_user}@{file_record.device_ip}:{file_record.absolute_path}"
+        temp_file = f"{temp_dir}/{file_record.file_name}"
+        subprocess.run(['scp', source, temp_file], check=True)
+
+        # SCP from temp to destination
+        dest = f"{device_user}@{device_ip}:{destination_path}"
+        subprocess.run(['scp', temp_file, dest], check=True)
+
+        return {"message": f"File {file_record.file_name} downloaded successfully to {dest}"}
+
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"SCP failed: {str(e)}")
+    finally:
+        # Clean up temp directory
+        shutil.rmtree(temp_dir)
 
 
 class FileMetadata(BaseModel):
