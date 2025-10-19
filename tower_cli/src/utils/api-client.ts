@@ -27,6 +27,10 @@ export interface RegisterResponse {
   action: 'created' | 'updated';
 }
 
+export interface SemanticSearchResult extends FileRecord {
+  similarity_score: number;
+}
+
 export class TowerAPIClient {
   private client: AxiosInstance | null = null;
   private configManager: ConfigManager;
@@ -159,6 +163,40 @@ export class TowerAPIClient {
     } catch (error: any) {
       if (error.response) {
         throw new Error(`Download failed: ${error.response.data.detail || error.response.statusText}`);
+      }
+      throw new Error(`Failed to connect to backend: ${error.message}`);
+    }
+  }
+
+  async registerEmbedding(fileId: number, embedding: number[]): Promise<void> {
+    try {
+      const client = this.getClient();
+      await client.post('/files/register-embedding', {
+        file_id: fileId,
+        embedding: embedding,
+      });
+    } catch (error: any) {
+      if (error.response) {
+        throw new Error(`Embedding registration failed: ${error.response.data.detail || error.response.statusText}`);
+      }
+      throw new Error(`Failed to connect to backend: ${error.message}`);
+    }
+  }
+
+  async semanticSearch(queryEmbedding: number[], k: number = 5): Promise<SemanticSearchResult[]> {
+    try {
+      const client = this.getClient();
+      const response = await client.post<SemanticSearchResult[]>('/files/semantic-search', {
+        query_embedding: queryEmbedding,
+        k: k,
+      });
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 404 || error.response?.data?.length === 0) {
+        return [];
+      }
+      if (error.response) {
+        throw new Error(`Semantic search failed: ${error.response.data.detail || error.response.statusText}`);
       }
       throw new Error(`Failed to connect to backend: ${error.message}`);
     }

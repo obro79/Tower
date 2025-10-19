@@ -4,6 +4,7 @@ import { globSync } from 'glob';
 import { ConfigManager } from '../utils/config';
 import { apiClient } from '../utils/api-client';
 import { Logger } from '../utils/logger';
+import { generateEmbeddingFromFile, isEmbeddingEnabled } from '../utils/embedding';
 
 interface FileState {
   path: string;
@@ -101,8 +102,17 @@ export class SyncDaemon {
       
       try {
         const metadata = apiClient.getLocalFileMetadata(filePath);
-        await apiClient.registerFile(metadata);
+        const response = await apiClient.registerFile(metadata);
         this.fileStates.set(filePath, currentState);
+        
+        if (isEmbeddingEnabled()) {
+          try {
+            const embedding = await generateEmbeddingFromFile(filePath);
+            await apiClient.registerEmbedding(response.file_id, embedding);
+          } catch (embError: any) {
+            Logger.warning(`Failed to generate embedding for ${path.basename(filePath)}: ${embError.message}`);
+          }
+        }
       } catch (error: any) {
         Logger.warning(`Failed to sync ${filePath}: ${error.message}`);
       }
