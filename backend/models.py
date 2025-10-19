@@ -11,3 +11,6 @@ class FileEntry(SQLModel, table=True):
     creation_time: datetime
     size: int
     file_type: str
+
+    class Config:
+        from_attributes = True
