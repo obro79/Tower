@@ -10,6 +10,14 @@ import { getConfig, setConfig, listConfig, resetConfig } from './commands/config
 import { init } from './commands/init';
 import { ConfigManager } from './utils/config';
 import { Logger } from './utils/logger';
+import {
+  showMainHelp,
+  showWatchHelp,
+  showSyncHelp,
+  showDevicesHelp,
+  showConfigHelp,
+  showSearchHelp
+} from './utils/help';
 
 const program = new Command();
 const configManager = new ConfigManager();
@@ -17,12 +25,52 @@ const configManager = new ConfigManager();
 program
   .name('tower')
   .description('A CLI tool to help you keep your files synced across devices')
-  .version('0.1.0');
+  .version('0.1.0')
+  .addHelpCommand(false) // Disable default help to use custom
+  .configureHelp({
+    // Override help to prevent default output
+    formatHelp: () => ''
+  })
+  .helpOption(false); // Disable -h and --help flags
+
+// Help command
+program
+  .command('help [command]')
+  .description('Show help for commands')
+  .action((command) => {
+    if (!command) {
+      showMainHelp();
+    } else {
+      switch (command) {
+        case 'watch':
+          showWatchHelp();
+          break;
+        case 'sync':
+          showSyncHelp();
+          break;
+        case 'devices':
+          showDevicesHelp();
+          break;
+        case 'config':
+          showConfigHelp();
+          break;
+        case 'search':
+          showSearchHelp();
+          break;
+        default:
+          showMainHelp();
+      }
+    }
+  });
 
 // Watch commands
 const watchCmd = program
   .command('watch')
-  .description('Manage watched files and directories');
+  .description('Manage watched files and directories')
+  .addHelpCommand(false)
+  .action(() => {
+    showWatchHelp();
+  });
 
 watchCmd
   .command('add <path>')
@@ -62,14 +110,18 @@ watchCmd
   });
 
 // Search command
-program
-  .command('search <query>')
+const searchCmd = program
+  .command('search [query]')
   .description('Search for files in the watch list')
   .option('-n, --name', 'Search by filename only')
   .option('-c, --content', 'Search file contents')
   .option('--tags <tags>', 'Filter by tags (comma-separated)')
   .option('--type <extension>', 'Filter by file type (e.g., js, md)')
   .action((query, options) => {
+    if (!query) {
+      showSearchHelp();
+      return;
+    }
     search(query, {
       name: options.name,
       content: options.content,
@@ -81,7 +133,8 @@ program
 // Sync commands
 const syncCmd = program
   .command('sync')
-  .description('Sync operations');
+  .description('Sync operations')
+  .addHelpCommand(false);
 
 syncCmd
   .description('Manually trigger a sync')
@@ -122,7 +175,11 @@ syncCmd
 // Devices commands
 const devicesCmd = program
   .command('devices')
-  .description('Manage connected devices');
+  .description('Manage connected devices')
+  .addHelpCommand(false)
+  .action(() => {
+    showDevicesHelp();
+  });
 
 devicesCmd
   .command('list')
@@ -155,7 +212,11 @@ devicesCmd
 // Config commands
 const configCmd = program
   .command('config')
-  .description('Manage configuration');
+  .description('Manage configuration')
+  .addHelpCommand(false)
+  .action(() => {
+    showConfigHelp();
+  });
 
 configCmd
   .command('get <key>')
@@ -204,13 +265,14 @@ program
 // Error handling
 program.exitOverride();
 
+// Show custom help if no command provided or if help flag is used
+if (process.argv.length === 2 || process.argv.includes('-h') || process.argv.includes('--help')) {
+  showMainHelp();
+  process.exit(0);
+}
+
 try {
   program.parse(process.argv);
-
-  // Show help if no command provided
-  if (process.argv.length === 2) {
-    program.outputHelp();
-  }
 } catch (error: any) {
   if (error.code !== 'commander.help' && error.code !== 'commander.helpDisplayed') {
     Logger.error(error.message);
