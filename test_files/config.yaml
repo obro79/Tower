@@ -1,0 +1,9 @@
+server:
+  host: localhost
+  port: 5000
+
+database:
+  path: files.db
+
+testing:
+  enabled: true
