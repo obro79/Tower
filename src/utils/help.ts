@@ -6,6 +6,30 @@ export interface CommandInfo {
   subcommands?: CommandInfo[];
 }
 
+export function showTowerArt(): void {
+  const purple = chalk.hex('#af5fff'); // Color 93 from terminal
+
+  console.log(purple(`
+                          ▐▌
+                          ▐▌
+                          ▐▌
+                         ▐👁▌
+                          ▐▌
+                          ▐▌
+                          ▐▌
+                         ████
+                        ██████
+                       ████████
+
+    ████████╗ ██████╗ ██╗    ██╗███████╗██████╗
+    ╚══██╔══╝██╔═══██╗██║    ██║██╔════╝██╔══██╗
+       ██║   ██║   ██║██║ █╗ ██║█████╗  ██████╔╝
+       ██║   ██║   ██║██║███╗██║██╔══╝  ██╔══██╗
+       ██║   ╚██████╔╝╚███╔███╔╝███████╗██║  ██║
+       ╚═╝    ╚═════╝  ╚══╝╚══╝ ╚══════╝╚═╝  ╚═╝
+`));
+}
+
 export class HelpFormatter {
   private commands: CommandInfo[] = [];
 
@@ -58,7 +82,16 @@ export class HelpFormatter {
   }
 }
 
+export function showWelcome(): void {
+  showTowerArt();
+  console.log(chalk.dim('  Type') + ' ' + chalk.green('tower help') + ' ' + chalk.dim('to see all commands'));
+  console.log(chalk.dim('  Type') + ' ' + chalk.green('tower init') + ' ' + chalk.dim('to get started'));
+  console.log();
+}
+
 export function showMainHelp(): void {
+  showTowerArt();
+
   const help = new HelpFormatter();
 
   // Watch commands
@@ -108,7 +141,7 @@ export function showMainHelp(): void {
 }
 
 export function showWatchHelp(): void {
-  console.log();
+  showTowerArt();
   console.log(chalk.dim('> tower watch'));
   console.log();
 
@@ -134,7 +167,7 @@ export function showWatchHelp(): void {
 }
 
 export function showSyncHelp(): void {
-  console.log();
+  showTowerArt();
   console.log(chalk.dim('> tower sync'));
   console.log();
 
@@ -158,7 +191,7 @@ export function showSyncHelp(): void {
 }
 
 export function showDevicesHelp(): void {
-  console.log();
+  showTowerArt();
   console.log(chalk.dim('> tower devices'));
   console.log();
 
@@ -179,7 +212,7 @@ export function showDevicesHelp(): void {
 }
 
 export function showConfigHelp(): void {
-  console.log();
+  showTowerArt();
   console.log(chalk.dim('> tower config'));
   console.log();
 
@@ -200,7 +233,7 @@ export function showConfigHelp(): void {
 }
 
 export function showSearchHelp(): void {
-  console.log();
+  showTowerArt();
   console.log(chalk.dim('> tower search'));
   console.log();
 

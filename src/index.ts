@@ -12,6 +12,7 @@ import { ConfigManager } from './utils/config';
 import { Logger } from './utils/logger';
 import {
   showMainHelp,
+  showWelcome,
   showWatchHelp,
   showSyncHelp,
   showDevicesHelp,
@@ -265,8 +266,14 @@ program
 // Error handling
 program.exitOverride();
 
-// Show custom help if no command provided or if help flag is used
-if (process.argv.length === 2 || process.argv.includes('-h') || process.argv.includes('--help')) {
+// Show welcome screen if no command provided
+if (process.argv.length === 2) {
+  showWelcome();
+  process.exit(0);
+}
+
+// Show help if help flag is used
+if (process.argv.includes('-h') || process.argv.includes('--help')) {
   showMainHelp();
   process.exit(0);
 }
