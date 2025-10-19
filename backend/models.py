@@ -2,8 +2,7 @@ from sqlmodel import SQLModel, Field
 from datetime import datetime
 from typing import Optional
 
-
-class FileRecord(SQLModel, table=True):
+class FileEntry(SQLModel, table=True):
     """
     Database model for tracking file metadata across devices.
     The Pi does NOT store actual files, only metadata.
@@ -14,12 +13,14 @@ class FileRecord(SQLModel, table=True):
     absolute_path: str  # Full absolute path on the source device
     device: str = Field(index=True)  # Device/computer name (hostname)
     device_ip: str  # IP address of the device for SCP retrieval
-    device_user: str  # SSH username for SCP connection
     last_modified_time: datetime  # Last modification time of the file
-    created_time: datetime = Field(default_factory=datetime.utcnow)  # When record was created in DB
+    created_time: datetime  # When record was created in DB
     size: int  # File size in bytes
     file_type: str  # File extension or MIME type
-
+      
+      
+    class Config:
+        from_attributes = True
 
 class FileSearchResponse(SQLModel):
     """
