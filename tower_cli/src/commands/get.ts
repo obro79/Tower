@@ -5,7 +5,7 @@ import { ConfigManager } from '../utils/config.js';
 import { Logger } from '../utils/logger.js';
 import { apiClient, FileRecord, SemanticSearchResult } from '../utils/api-client.js';
 import { generateEmbeddingFromText, isEmbeddingEnabled } from '../utils/embedding.js';
-import { init } from './init';
+import { init } from './init.js';
 
 const configManager = new ConfigManager();
 

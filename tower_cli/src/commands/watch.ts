@@ -8,7 +8,7 @@ import { Logger } from '../utils/logger.js';
 import { WatchedItem } from '../types/index.js';
 import { apiClient } from '../utils/api-client.js';
 import { globSync } from 'glob';
-import { init } from './init';
+import { init } from './init.js';
 
 const configManager = new ConfigManager();
 
@@ -67,7 +67,7 @@ async function registerWithBackend(filePath: string): Promise<void> {
     } else if (stats.isDirectory()) {
       const globPattern = path.join(filePath, '**/*');
       const files = globSync(globPattern, { nodir: true });
-      
+
       let registered = 0;
       for (const file of files) {
         try {
@@ -78,7 +78,7 @@ async function registerWithBackend(filePath: string): Promise<void> {
           Logger.warning(`Failed to register ${file}: ${err.message}`);
         }
       }
-      
+
       Logger.success(`Registered ${registered} file(s) from directory with backend`);
     }
   } catch (error: any) {
@@ -129,7 +129,7 @@ async function deleteFromBackend(filePath: string): Promise<void> {
     } else if (stats && stats.isDirectory()) {
       const globPattern = path.join(filePath, '**/*');
       const files = globSync(globPattern, { nodir: true });
-      
+
       let deleted = 0;
       for (const file of files) {
         try {
@@ -139,7 +139,7 @@ async function deleteFromBackend(filePath: string): Promise<void> {
           Logger.warning(`Failed to delete ${file}: ${err.message}`);
         }
       }
-      
+
       Logger.success(`Removed ${deleted} file(s) from backend registry`);
     } else {
       await apiClient.deleteFileByPath(filePath);
@@ -170,7 +170,7 @@ export function listWatch(): void {
 
     watchList.forEach(item => {
       const exists = fs.existsSync(item.path);
-      const type = exists 
+      const type = exists
         ? (fs.statSync(item.path).isDirectory() ? 'Directory' : 'File')
         : 'Missing';
       const added = new Date(item.addedAt).toLocaleString();

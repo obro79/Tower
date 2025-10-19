@@ -3,12 +3,12 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
-import { init } from './commands/init';
-import { addWatch, removeWatch, listWatch } from './commands/watch';
-import { search } from './commands/search';
-import { get } from './commands/get';
-import { ConfigManager } from './utils/config';
-import { displayLogo } from './utils/logo';
+import { init } from './commands/init.js';
+import { addWatch, removeWatch, listWatch } from './commands/watch.js';
+import { search, semanticSearch } from './commands/search.js';
+import { get } from './commands/get.js';
+import { ConfigManager } from './utils/config.js';
+import { displayLogo } from './utils/logo.js';
 
 // Display logo on every run
 displayLogo();

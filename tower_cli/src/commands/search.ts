@@ -4,9 +4,6 @@ import { ConfigManager } from '../utils/config.js';
 import { Logger } from '../utils/logger.js';
 import { apiClient } from '../utils/api-client.js';
 import { generateEmbeddingFromText } from '../utils/embedding.js';
-import { ConfigManager } from '../utils/config.js';
-import { Logger } from '../utils/logger.js';
-import { apiClient } from '../utils/api-client.js';
 import { init } from './init.js';
 
 const configManager = new ConfigManager();

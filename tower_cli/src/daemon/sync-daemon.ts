@@ -5,9 +5,6 @@ import { ConfigManager } from '../utils/config.js';
 import { apiClient } from '../utils/api-client.js';
 import { Logger } from '../utils/logger.js';
 import { generateEmbeddingFromFile, isEmbeddingEnabled } from '../utils/embedding.js';
-import { ConfigManager } from '../utils/config.js';
-import { apiClient } from '../utils/api-client.js';
-import { Logger } from '../utils/logger.js';
 import { init } from '../commands/init.js';
 
 interface FileState {
