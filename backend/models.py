@@ -1,48 +1,41 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, UniqueConstraint
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel, Field
+from datetime import datetime
+from typing import Optional
 
 
-class File(Base):
+class FileRecord(SQLModel, table=True):
     """
-    File metadata model.
-    
-    Attributes:
-        id: Primary key
-        filename: Filename
-        device: Device identifier (e.g., 'client_a', 'client_b')
-        path: Unique file path on the storage system
-        alias: Owner/uploader identifier
-        size: File size in bytes
-        uploaded_at: Timestamp when file was uploaded
-        modified_at: Last modification timestamp
-        file_type: File extension/type (e.g., 'txt', 'pdf', 'jpg')
+    File metadata model for storing file information across devices.
+
+    This table stores ONLY metadata - no actual files are stored on the Pi.
+    Files are retrieved via SCP from source devices on demand.
     """
-    __tablename__ = 'files'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    filename = Column(String, nullable=False, index=True)
-    device = Column(String, nullable=False)
-    path = Column(String, unique=True, nullable=False)
-    alias = Column(String, nullable=False, index=True)
-    size = Column(Integer, nullable=False)
-    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    modified_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    file_type = Column(String, nullable=True)
-    
-    def __repr__(self):
-        return f"<File(id={self.id}, filename='{self.filename}', alias='{self.alias}', size={self.size})>"
-    
-    def to_dict(self):
-        """Convert file object to dictionary."""
-        return {
-            'id': self.id,
-            'filename': self.filename,
-            'device': self.device,
-            'path': self.path,
-            'alias': self.alias,
-            'size': self.size,
-            'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None,
-            'modified_at': self.modified_at.isoformat() if self.modified_at else None,
-            'file_type': self.file_type
-        }
+    __tablename__ = "file_records"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    file_name: str = Field(index=True, description="Original file name")
+    absolute_path: str = Field(description="Full path on source device")
+    device: str = Field(index=True, description="Device hostname/name")
+    device_ip: str = Field(description="IP address for SCP connection")
+    device_user: str = Field(description="SSH username for SCP")
+    last_modified_time: datetime = Field(description="Last modification time of file")
+    created_time: datetime = Field(default_factory=datetime.utcnow, description="When record was created in DB")
+    size: int = Field(description="File size in bytes")
+    file_type: str = Field(description="File extension (e.g., .txt, .pdf)")
+
+
+class FileSearchResponse(SQLModel):
+    """
+    Response model for file search results.
+    Matches FileRecord but used for API responses.
+    """
+    id: int
+    file_name: str
+    absolute_path: str
+    device: str
+    device_ip: str
+    device_user: str
+    last_modified_time: datetime
+    created_time: datetime
+    size: int
+    file_type: str
