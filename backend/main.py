@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, Body
+from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select, or_
 from typing import List, Optional
 from pathlib import Path
@@ -13,6 +14,14 @@ from models import FileRecord, FileSearchResponse
 from database import create_db_and_tables, get_session
 
 app = FastAPI(title="File Sync API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
