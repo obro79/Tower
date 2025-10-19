@@ -6,6 +6,8 @@ import inquirer from 'inquirer';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
 import { WatchedItem, WatchOptions } from '../types';
+import { apiClient } from '../utils/api-client';
+import * as glob from 'glob';
 
 const configManager = new ConfigManager();
 
@@ -48,8 +50,60 @@ export async function addWatch(
     if (stats.isDirectory() && options.recursive) {
       Logger.info(`Watching directory recursively`);
     }
+
+    // Register file(s) with backend
+    await registerWithBackend(absolutePath, options);
+
   } catch (error: any) {
     Logger.error(`Failed to add watch: ${error.message}`);
+  }
+}
+
+/**
+ * Register file(s) with the backend API
+ */
+async function registerWithBackend(
+  filePath: string,
+  options: WatchOptions
+): Promise<void> {
+  try {
+    // Check if backend is available
+    const isBackendRunning = await apiClient.healthCheck();
+    if (!isBackendRunning) {
+      Logger.warning('Backend server not running - files not registered for sync');
+      Logger.info('Start backend with: cd backend && uvicorn main:app --reload');
+      return;
+    }
+
+    const stats = fs.statSync(filePath);
+
+    if (stats.isFile()) {
+      // Register single file
+      const metadata = apiClient.getLocalFileMetadata(filePath);
+      const response = await apiClient.registerFile(metadata);
+      Logger.success(`✓ Registered with backend: ${response.file_name} (ID: ${response.file_id})`);
+    } else if (stats.isDirectory() && options.recursive) {
+      // Register all files in directory recursively
+      const excludePatterns = options.exclude || [];
+      const globPattern = path.join(filePath, '**/*');
+
+      glob.sync(globPattern, {
+        nodir: true,  // Only files, not directories
+        ignore: excludePatterns.map(pattern => path.join(filePath, '**', pattern))
+      }).forEach(async (file) => {
+        try {
+          const metadata = apiClient.getLocalFileMetadata(file);
+          await apiClient.registerFile(metadata);
+        } catch (err: any) {
+          Logger.warning(`Failed to register ${file}: ${err.message}`);
+        }
+      });
+
+      Logger.success(`✓ Registered directory contents with backend`);
+    }
+  } catch (error: any) {
+    Logger.warning(`Backend registration failed: ${error.message}`);
+    Logger.info('Files added to watch list but not synced to backend');
   }
 }
 
