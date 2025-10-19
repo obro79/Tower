@@ -17,6 +17,7 @@ import shutil
 from models import FileRecord, FileSearchResponse
 from database import create_db_and_tables, get_session
 from logging_config import log_request_details, log_response_details, log_error_details, request_logger
+from ssh_key_manager import ssh_key_manager
 
 app = FastAPI(title="File Sync API", version="1.0.0")
 
@@ -88,9 +89,17 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     """
-    Initialize database on startup
+    Initialize database and SSH keys on startup
     """
     create_db_and_tables()
+    
+    try:
+        private_key, public_key = ssh_key_manager.generate_keypair()
+        request_logger.info(f"SSH backend key ready: {private_key}")
+        request_logger.info(f"Public key: {public_key[:50]}...")
+    except Exception as e:
+        request_logger.error(f"Failed to generate SSH keys: {e}")
+        raise
 
 
 @app.get("/")
@@ -99,6 +108,53 @@ def read_root():
     Health check endpoint
     """
     return {"status": "File Sync API is running"}
+
+
+@app.get("/ssh/public-key")
+def get_ssh_public_key():
+    """
+    GET endpoint: Retrieve backend's SSH public key
+    
+    Clients call this during 'tower init' to get the public key
+    and add it to their ~/.ssh/authorized_keys for passwordless SCP.
+    
+    Returns:
+    - public_key: SSH public key string
+    - key_type: Key algorithm (e.g., 'ssh-ed25519')
+    - comment: Key comment
+    - fingerprint: Key fingerprint for verification
+    """
+    request_logger.info("ENDPOINT /ssh/public-key | Public key requested")
+    
+    try:
+        public_key = ssh_key_manager.get_public_key()
+        
+        parts = public_key.split()
+        key_type = parts[0] if len(parts) > 0 else "unknown"
+        key_data = parts[1] if len(parts) > 1 else ""
+        comment = parts[2] if len(parts) > 2 else "tower_backend"
+        
+        result = subprocess.run(
+            ['ssh-keygen', '-lf', str(ssh_key_manager.public_key_path)],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        fingerprint = result.stdout.strip().split()[1] if result.stdout else "unknown"
+        
+        response = {
+            "public_key": public_key,
+            "key_type": key_type,
+            "comment": comment,
+            "fingerprint": fingerprint
+        }
+        
+        request_logger.info(f"ENDPOINT /ssh/public-key | Returned key with fingerprint: {fingerprint}")
+        return response
+        
+    except Exception as e:
+        request_logger.error(f"ENDPOINT /ssh/public-key | Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve SSH public key: {str(e)}")
 
 
 @app.get("/files/search", response_model=List[FileSearchResponse])
@@ -166,12 +222,14 @@ def get_file_metadata(file_id: int, device_ip: str = Query(..., description="IP 
         source = f"{file_record.device_user}@{file_record.device_ip}:{file_record.absolute_path}"
         temp_file = f"{temp_dir}/{file_record.file_name}"
         
+        ssh_key = ssh_key_manager.get_private_key_path()
+        
         request_logger.info(f"ENDPOINT /files/{file_id} | SCP from source: {source} to temp: {temp_file}")
-        subprocess.run(['scp', source, temp_file], check=True)
+        subprocess.run(['scp', '-i', ssh_key, '-o', 'StrictHostKeyChecking=no', source, temp_file], check=True)
 
         dest = f"{device_user}@{device_ip}:{destination_path}"
         request_logger.info(f"ENDPOINT /files/{file_id} | SCP from temp to destination: {dest}")
-        subprocess.run(['scp', temp_file, dest], check=True)
+        subprocess.run(['scp', '-i', ssh_key, '-o', 'StrictHostKeyChecking=no', temp_file, dest], check=True)
 
         request_logger.info(f"ENDPOINT /files/{file_id} | Successfully transferred file: {file_record.file_name}")
         return {"message": f"File {file_record.file_name} downloaded successfully to {dest}"}

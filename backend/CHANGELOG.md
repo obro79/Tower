@@ -6,6 +6,30 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+#### SSH Key Management System
+- **New file**: `ssh_key_manager.py` - Automated SSH key management
+  - Automatically generates SSH keypair on backend startup if not present
+  - Uses ed25519 algorithm (modern, secure, fast)
+  - Key stored at `~/.ssh/tower_backend_key` (private) and `~/.ssh/tower_backend_key.pub` (public)
+  - No passphrase for automated SCP operations
+  - Proper file permissions (600 for private, 644 for public)
+  - Singleton pattern with global instance
+
+- **New endpoint**: `GET /ssh/public-key`
+  - Returns backend's SSH public key for client authorization
+  - Response includes:
+    - `public_key`: Full SSH public key string
+    - `key_type`: Algorithm (e.g., 'ssh-ed25519')
+    - `comment`: Key comment ('tower_backend_auto_generated')
+    - `fingerprint`: Key fingerprint for verification
+  - Called by `tower init` to enable passwordless SCP access
+  - Logged in request logs
+
+- **Enhanced SCP operations**
+  - All SCP commands now use the generated SSH private key (`-i` flag)
+  - Added `StrictHostKeyChecking=no` for automatic host key acceptance
+  - Applies to both source→backend and backend→destination transfers
+
 #### Request Logging System
 - **New file**: `logging_config.py` - Comprehensive logging configuration module
   - Rotating file handler for request logs (max 10MB per file, 5 backup files)
@@ -68,14 +92,17 @@ All logs follow this JSON structure:
 - Old logs are preserved as `requests.log.1`, `requests.log.2`, etc.
 
 ### Changed
-- Updated `main.py` imports to include logging dependencies
+- Updated `main.py` imports to include logging dependencies and SSH key manager
 - Added `Request` import from FastAPI
 - Added middleware imports from Starlette
+- Modified `on_startup()` to generate SSH keys on server startup
+- Updated SCP commands in `GET /files/{file_id}` to use backend's SSH key
 
 ### Files Modified
-- `main.py` - Added logging middleware and endpoint logging
+- `main.py` - Added logging middleware, endpoint logging, SSH key startup, and new `/ssh/public-key` endpoint
 - Created `logging_config.py` - New logging configuration module
-- Created `CHANGELOG.md` - This file
+- Created `ssh_key_manager.py` - SSH key generation and management
+- Updated `CHANGELOG.md` - This file
 
 ### Dependencies
 No new external dependencies required. Uses Python standard library:
