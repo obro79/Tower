@@ -1,7 +1,35 @@
 """
 Embedding generation module for distributed file transfer system.
-Generates vector embeddings from file content or raw text using Google's Gemini API.
+Generates vector embeddings from file content or raw text using sentence-transformers.
+NO API KEY REQUIRED - runs locally!
 """
+
+import numpy as np
+import os
+from typing import Union
+from pathlib import Path
+
+# Sentence transformer model (lazy loaded)
+_embedding_model = None
+
+
+def get_embeddings_model():
+    """
+    Get or initialize the sentence transformer model.
+    No API key needed - runs locally!
+    """
+    global _embedding_model
+    if _embedding_model is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            # Use a small, fast model that runs locally
+            _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            print("Loaded local sentence transformer model: all-MiniLM-L6-v2 (no API key needed)")
+        except ImportError:
+            raise ImportError(
+                "sentence-transformers package is required. Install with: pip install sentence-transformers"
+            )
+    return _embedding_model
 
 import numpy as np
 import os
@@ -39,72 +67,62 @@ def get_genai_client():
 
 def generate_embedding(input_data: Union[str, Path], is_file: bool = None) -> np.ndarray:
     """
-    Generate embedding vector from either a file or raw text content.
-    If the content is the same, the embedding will be the same.
+    Generate embedding vector from file content or text string.
+    Uses local sentence transformer model - no API key needed!
     
     Args:
-        input_data: Either a file path (str or Path) or raw text content (str)
-        is_file: If True, treat input_data as file path. If False, treat as raw text.
-                 If None, auto-detect based on whether input_data is a valid file path.
+        input_data: Either a file path (str/Path) or text content (str)
+        is_file: If True, treat input_data as file path. If False, treat as text.
+                If None, auto-detect based on input type and file existence.
     
     Returns:
         numpy array of shape (384,) containing the embedding vector
     
-    Raises:
-        FileNotFoundError: If is_file=True but file doesn't exist
-        ValueError: If input_data is empty
-    
-    Examples:
-        >>> # From file
-        >>> embedding1 = generate_embedding('/path/to/file.txt', is_file=True)
-        >>> 
-        >>> # From raw text
-        >>> embedding2 = generate_embedding('This is some text content', is_file=False)
-        >>> 
-        >>> # Auto-detect
-        >>> embedding3 = generate_embedding('/path/to/file.txt')  # Treats as file if exists
-        >>> embedding4 = generate_embedding('Some text')  # Treats as text if not a file
+    Example:
+        # From file
+        embedding = generate_embedding("document.txt", is_file=True)
+        
+        # From text
+        embedding = generate_embedding("This is my text content", is_file=False)
+        
+        # Auto-detect
+        embedding = generate_embedding(Path("document.txt"))
     """
-    # Auto-detect if is_file is not specified
-    if is_file is None:
-        input_path = Path(input_data)
-        is_file = input_path.exists() and input_path.is_file()
+    model = get_embeddings_model()
     
-    # Read content
+    # Auto-detect if is_file not specified
+    if is_file is None:
+        if isinstance(input_data, Path):
+            is_file = True
+        elif isinstance(input_data, str):
+            # Check if it's a valid file path
+            is_file = os.path.isfile(input_data)
+        else:
+            raise ValueError("input_data must be a string or Path object")
+    
+    # Read file content if needed
     if is_file:
         file_path = Path(input_data)
         if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {input_data}")
+            raise FileNotFoundError(f"File not found: {file_path}")
         
-        # Read file content
         try:
+            # Try reading as text
             with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+                text_content = f.read()
         except UnicodeDecodeError:
-            # Try reading as binary and decode with errors='ignore'
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-        
-        print(f"Read {len(content)} characters from file: {file_path}")
+            # If binary file, convert to string representation
+            with open(file_path, 'rb') as f:
+                # For binary files, use filename + size as content
+                text_content = f"{file_path.name} (binary file, size: {file_path.stat().st_size} bytes)"
     else:
-        content = str(input_data)
+        text_content = str(input_data)
     
-    # Validate content
-    if not content or not content.strip():
-        raise ValueError("Content is empty. Cannot generate embedding for empty content.")
+    if not text_content or not text_content.strip():
+        raise ValueError("Cannot generate embedding from empty content")
     
-    # Generate embedding using Gemini API
-    genai = get_genai_client()
+    # Generate embedding using local model
+    embedding = model.encode(text_content, convert_to_numpy=True)
     
-    # Use Gemini's embedding model
-    result = genai.embed_content(
-        model="models/embedding-001",
-        content=content,
-        task_type="retrieval_document"
-    )
-    
-    # Extract embedding from response
-    embedding = np.array(result['embedding'], dtype='float32')
-    
-    print(f"Generated embedding with shape: {embedding.shape}")
-    return embedding
+    # Ensure it's a 1D numpy array of float32
+    return embedding.astype(np.float32)
