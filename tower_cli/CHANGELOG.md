@@ -274,3 +274,54 @@ No new dependencies. Uses existing:
 3. Verify backend can SSH to device: `ssh user@device-ip "echo test"`
 4. Verify SCP works: `scp user@device-ip:/path/to/file ./test`
 
+
+---
+
+## [Bugfix] - 2025-10-19 (Post-SSH Implementation)
+
+### Fixed
+
+#### IPv4 Detection on Windows
+- **Issue:** `dns.lookup(os.hostname())` was returning IPv6 link-local addresses (fe80::...) on Windows instead of IPv4
+- **Solution:** 
+  - Added `{ family: 4 }` option to `dns.lookup()` to force IPv4
+  - Added fallback to iterate through `os.networkInterfaces()` to find non-internal IPv4
+  - Prioritizes external IPv4 addresses over loopback
+- **Impact:** Clients now correctly register with IPv4 addresses (192.168.x.x) instead of IPv6
+- **File:** `src/commands/init.ts`
+
+**Before:**
+```typescript
+dns.lookup(os.hostname(), (err, address) => { ... })
+// Returns: fe80::144b:6510:cbe6:20b8 on Windows
+```
+
+**After:**
+```typescript
+dns.lookup(os.hostname(), { family: 4 }, (err, address) => {
+  if (err || !address) {
+    // Fallback: iterate network interfaces for IPv4
+    const networkInterfaces = os.networkInterfaces();
+    for (const interfaceName in networkInterfaces) {
+      const addresses = networkInterfaces[interfaceName];
+      if (addresses) {
+        for (const addr of addresses) {
+          if (addr.family === 'IPv4' && !addr.internal) {
+            resolve(addr.address);
+            return;
+          }
+        }
+      }
+    }
+    resolve('127.0.0.1');
+  }
+})
+// Returns: 192.168.50.142
+```
+
+### Related Backend Fix
+
+Backend also received fix for Windows path handling:
+- Added `format_scp_path()` function to convert `C:\Users\...` to `/C/Users/...`
+- SCP now works correctly with Windows file paths
+

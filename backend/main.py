@@ -21,6 +21,20 @@ from ssh_key_manager import ssh_key_manager
 
 app = FastAPI(title="File Sync API", version="1.0.0")
 
+def format_scp_path(path: str) -> str:
+    """
+    Format a file path for SCP compatibility.
+    Converts Windows backslashes to forward slashes and escapes special characters.
+    """
+    path = path.replace('\\', '/')
+    
+    if ':' in path and not path.startswith('/'):
+        drive_letter = path[0]
+        rest = path[2:]
+        path = f"/{drive_letter}/{rest}"
+    
+    return path
+
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
@@ -219,15 +233,17 @@ def get_file_metadata(file_id: int, device_ip: str = Query(..., description="IP 
     temp_dir = tempfile.mkdtemp()
 
     try:
-        source = f"{file_record.device_user}@{file_record.device_ip}:{file_record.absolute_path}"
-        temp_file = f"{temp_dir}/{file_record.file_name}"
-        
         ssh_key = ssh_key_manager.get_private_key_path()
+        
+        source_path = format_scp_path(file_record.absolute_path)
+        source = f"{file_record.device_user}@{file_record.device_ip}:{source_path}"
+        temp_file = f"{temp_dir}/{file_record.file_name}"
         
         request_logger.info(f"ENDPOINT /files/{file_id} | SCP from source: {source} to temp: {temp_file}")
         subprocess.run(['scp', '-i', ssh_key, '-o', 'StrictHostKeyChecking=no', source, temp_file], check=True)
 
-        dest = f"{device_user}@{device_ip}:{destination_path}"
+        dest_path = format_scp_path(destination_path)
+        dest = f"{device_user}@{device_ip}:{dest_path}"
         request_logger.info(f"ENDPOINT /files/{file_id} | SCP from temp to destination: {dest}")
         subprocess.run(['scp', '-i', ssh_key, '-o', 'StrictHostKeyChecking=no', temp_file, dest], check=True)
 

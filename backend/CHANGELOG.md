@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+#### Windows Path Support
+- **New function**: `format_scp_path()` in `main.py`
+  - Converts Windows backslashes to forward slashes for SCP compatibility
+  - Transforms Windows drive letters (C:) to Cygwin format (/C/)
+  - Applied to both source and destination paths in file transfers
+  - Fixes SCP errors with Windows paths like `C:\Users\...`
+
 #### SSH Key Management System
 - **New file**: `ssh_key_manager.py` - Automated SSH key management
   - Automatically generates SSH keypair on backend startup if not present

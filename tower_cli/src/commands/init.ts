@@ -10,8 +10,20 @@ const configManager = new ConfigManager();
 
 function getLocalIp(): Promise<string> {
   return new Promise((resolve) => {
-    dns.lookup(os.hostname(), (err, address) => {
+    dns.lookup(os.hostname(), { family: 4 }, (err, address) => {
       if (err || !address) {
+        const networkInterfaces = os.networkInterfaces();
+        for (const interfaceName in networkInterfaces) {
+          const addresses = networkInterfaces[interfaceName];
+          if (addresses) {
+            for (const addr of addresses) {
+              if (addr.family === 'IPv4' && !addr.internal) {
+                resolve(addr.address);
+                return;
+              }
+            }
+          }
+        }
         resolve('127.0.0.1');
       } else {
         resolve(address);
