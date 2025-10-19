@@ -1,10 +1,10 @@
 import * as path from 'path';
 import * as os from 'os';
-import * as fs from 'fs';
 import inquirer from 'inquirer';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
 import { apiClient, FileRecord } from '../utils/api-client';
+import { init } from './init';
 
 const configManager = new ConfigManager();
 
@@ -22,17 +22,16 @@ export async function get(
 ): Promise<void> {
   try {
     if (!configManager.isInitialized()) {
-      Logger.error('Tower not initialized. Run "tower init" first.');
-      return;
+      await init();
+      if (!configManager.isInitialized()) {
+        return;
+      }
     }
 
     if (!filename) {
       Logger.error('Please provide a filename or search query');
-      Logger.info('Usage: tower get <filename> [destination]');
-      Logger.info('Examples:');
-      Logger.info('  tower get "report.pdf"                    # Save to current directory');
-      Logger.info('  tower get "report.pdf" ~/Documents/       # Save to specific directory');
-      Logger.info('  tower get "report.pdf" ./my-report.pdf    # Save with custom name');
+      Logger.info('Usage: tower get <filename>');
+      Logger.info('       tower get "research paper about AI"  (natural language - not implemented)');
       return;
     }
 
@@ -111,7 +110,7 @@ async function downloadFile(
   Logger.info(`Size: ${(fileRecord.size / 1024 / 1024).toFixed(2)} MB`);
 
   // Determine destination path
-  const dest = destination || path.join(process.cwd(), fileRecord.file_name);
+  const dest = destination || path.join(os.homedir(), 'Downloads', fileRecord.file_name);
 
   // Download file via SCP
   Logger.info('Initiating file transfer via SCP...');

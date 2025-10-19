@@ -3,14 +3,17 @@ import Table from 'cli-table3';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
 import { apiClient } from '../utils/api-client';
+import { init } from './init';
 
 const configManager = new ConfigManager();
 
 export async function search(query: string): Promise<void> {
   try {
     if (!configManager.isInitialized()) {
-      Logger.error('Tower not initialized. Run "tower init" first.');
-      return;
+      await init();
+      if (!configManager.isInitialized()) {
+        return;
+      }
     }
 
     const isBackendRunning = await apiClient.healthCheck();

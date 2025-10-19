@@ -1,13 +1,16 @@
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
+import { init } from './init';
 
 const configManager = new ConfigManager();
 
 export async function getRemote(): Promise<void> {
   try {
     if (!configManager.isInitialized()) {
-      Logger.error('Tower not initialized. Run "tower init" first.');
-      return;
+      await init();
+      if (!configManager.isInitialized()) {
+        return;
+      }
     }
 
     Logger.warning('tower get-remote is not yet implemented');

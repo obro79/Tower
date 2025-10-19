@@ -34,11 +34,11 @@ export async function init(): Promise<void> {
       {
         type: 'input',
         name: 'backendIp',
-        message: 'Backend IP address (e.g., 192.168.1.10):',
+        message: 'Backend server IP address (e.g., 192.168.1.10):',
         validate: (input) => {
           if (!input) return 'IP address is required';
           const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
-          if (!ipv4Regex.test(input)) return 'Invalid IPv4 address';
+          if (!ipv4Regex.test(input)) return 'Invalid IPv4 address format';
           return true;
         }
       },
@@ -51,13 +51,14 @@ export async function init(): Promise<void> {
       }
     ]);
 
+    // Construct the full backend URL from the IP address
     const backendUrl = `http://${answers.backendIp}:8000`;
 
     console.log();
     Logger.info('Detecting device IP address from backend...');
 
     let deviceIp = await getDeviceIpFromBackend(backendUrl);
-    
+
     if (!deviceIp || deviceIp === 'unknown') {
       Logger.warning('Auto-detection failed');
       const ipAnswer = await inquirer.prompt([
