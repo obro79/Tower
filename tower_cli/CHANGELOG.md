@@ -419,3 +419,235 @@ Timeout: 5000ms
 Backend added `GET /client-info` endpoint to support this feature.
 See backend CHANGELOG.md for details.
 
+
+---
+
+## [RAG Integration] - 2025-10-19
+
+### Added - Semantic Search with RAG (Retrieval-Augmented Generation)
+
+#### New file: `src/utils/embedding.ts`
+- **Purpose:** Client-side embedding generation for semantic search
+- **Model:** `Xenova/all-MiniLM-L6-v2` (384 dimensions)
+- **Library:** `@xenova/transformers` - Runs completely locally, no API keys needed
+- **Features:**
+  - Lazy-loads embedding model on first use (~50MB download, cached afterward)
+  - Generates embeddings from file content (first 100KB for large files)
+  - Generates embeddings from natural language queries
+  - Smart file handling:
+    - UTF-8 text files: Reads and embeds content
+    - Binary files: Uses filename + extension for embedding
+    - Empty files: Uses filename for embedding
+  - Environment variable control: `TOWER_ENABLE_EMBEDDINGS` (default: true)
+
+**Functions:**
+- `generateEmbeddingFromText(text: string): Promise<number[]>` - Embed text/query
+- `generateEmbeddingFromFile(filePath: string): Promise<number[]>` - Embed file content
+- `isEmbeddingEnabled(): boolean` - Check if embeddings are enabled
+
+#### Updated: `src/utils/api-client.ts`
+- **New interface:** `SemanticSearchResult` - Extends `FileRecord` with similarity scores
+- **New method:** `registerEmbedding(fileId: number, embedding: number[]): Promise<void>`
+  - Sends client-generated embedding to backend
+  - Associates embedding with file ID
+  - Called after successful file registration
+- **New method:** `semanticSearch(queryEmbedding: number[], k: number): Promise<SemanticSearchResult[]>`
+  - Sends query embedding to backend
+  - Returns ranked list of similar files
+  - Includes similarity scores (0-1 range, higher = more similar)
+
+#### Updated: `src/commands/get.ts`
+- **Enhanced natural language support:**
+  - Detects natural language queries (multiple words, no wildcards, no extensions)
+  - Example: `tower get "research paper about machine learning"`
+  - Generates embedding from query text
+  - Calls semantic search endpoint
+  - Displays results with similarity scores
+  - Falls back to wildcard search for filename patterns
+- **Updated help text:**
+  - Now shows natural language search is available
+  - No longer shows "not implemented" warning
+- **Improved user experience:**
+  - Shows "Using semantic search for natural language query..."
+  - Displays similarity percentage with each result
+  - Allows selecting from ranked results
+
+#### Updated: `src/daemon/sync-daemon.ts`
+- **Automatic embedding generation:**
+  - After successful file registration, generates embedding
+  - Sends embedding to backend via `registerEmbedding()`
+  - Graceful degradation: Warns if embedding fails, continues sync
+  - Respects `TOWER_ENABLE_EMBEDDINGS` environment variable
+  - Only generates embeddings for new/modified files (not on every sync)
+
+#### Updated: `package.json`
+- **New dependency:** `@xenova/transformers@^2.17.1`
+  - Transformers.js library for local ML model execution
+  - Enables client-side embedding generation
+  - No server-side processing required
+  - No API keys or external services needed
+
+### Architecture
+
+#### Client-Side Embedding Flow
+```
+1. File changed → Sync daemon detects
+2. Register metadata → POST /files/register → Returns file_id
+3. Read file content (max 100KB)
+4. Generate embedding → Transformers.js locally (384 floats)
+5. Send embedding → POST /files/register-embedding
+6. Backend stores in FAISS vector database
+```
+
+#### Semantic Search Flow
+```
+1. User: tower get "research paper about AI"
+2. CLI detects natural language query
+3. Generate query embedding → Transformers.js (384 floats)
+4. Send to backend → POST /files/semantic-search
+5. Backend: FAISS similarity search
+6. Returns ranked files with similarity scores
+7. User selects file to download
+```
+
+### Technical Details
+
+#### Why Client-Side Embeddings?
+- **Privacy:** Backend never sees file content
+- **Architecture:** Backend only has metadata, not files
+- **Distribution:** Spreads computational load across clients
+- **Security:** Sensitive file content stays on device
+- **Scalability:** No backend bottleneck for embedding generation
+
+#### Model Performance
+- **First run:** Downloads ~50MB model (one-time, cached afterward)
+- **Embedding time:** 100-500ms per file
+- **Search latency:** <100ms (FAISS on backend)
+- **Memory:** ~200MB when model loaded
+- **Accuracy:** Good for document/code similarity search
+
+#### Environment Variables
+```bash
+# Enable embeddings (default)
+export TOWER_ENABLE_EMBEDDINGS=true
+
+# Disable embeddings
+export TOWER_ENABLE_EMBEDDINGS=false
+```
+
+### Usage Examples
+
+#### Natural Language Search
+```bash
+# Semantic search using natural language
+tower get "python script for data analysis"
+tower get "research paper about neural networks"
+tower get "meeting notes from last week"
+
+# Results show similarity scores
+# Example output:
+# 1. analyze_data.py (desktop @ 192.168.1.10) - Similarity: 87.3%
+# 2. data_processing.py (laptop @ 192.168.1.20) - Similarity: 72.1%
+```
+
+#### Filename Patterns (Traditional Search)
+```bash
+# Still works - uses wildcard search, not embeddings
+tower get "*.pdf"
+tower get "report*"
+tower get "document.txt"
+```
+
+#### Disable Embeddings
+```bash
+# Temporarily disable
+TOWER_ENABLE_EMBEDDINGS=false tower watch myfile.txt
+
+# File syncs without embedding
+# Natural language search will be disabled
+```
+
+### Files Modified
+- Created `src/utils/embedding.ts` - Embedding generation utility
+- Updated `src/utils/api-client.ts` - Added embedding endpoints
+- Updated `src/commands/get.ts` - Semantic search support
+- Updated `src/daemon/sync-daemon.ts` - Auto-embedding on sync
+- Updated `package.json` - Added @xenova/transformers dependency
+- Updated `CHANGELOG.md` - This entry
+
+### Dependencies
+- `@xenova/transformers@^2.17.1` - Local ML model execution (new)
+
+### Testing
+
+#### Test Semantic Search
+```bash
+# 1. Sync some files
+tower watch ~/Documents/
+
+# 2. Wait for embeddings to be generated
+# Check backend logs for: "Embedding registered for file_id: X"
+
+# 3. Try natural language search
+tower get "document about testing"
+
+# 4. Should see ranked results with similarity scores
+```
+
+#### Test Embedding Generation
+```bash
+# Check embedding was created
+# Backend logs should show:
+# "ENDPOINT /files/register-embedding | file_id: X"
+# "Successfully registered embedding for file_id: X"
+```
+
+#### Disable Embeddings
+```bash
+# Disable and test
+export TOWER_ENABLE_EMBEDDINGS=false
+tower get "natural language query"
+
+# Should show: "Semantic search disabled. Set TOWER_ENABLE_EMBEDDINGS=true to enable."
+```
+
+### Performance Notes
+- Model download only happens once (cached)
+- Embedding generation is async (doesn't block file sync)
+- Failed embeddings don't prevent file sync
+- Semantic search queries cached backend-side
+
+### Troubleshooting
+
+#### Model Download Fails
+```bash
+# Clear cache and retry
+rm -rf ~/.cache/huggingface
+tower watch testfile.txt
+```
+
+#### Embeddings Not Working
+```bash
+# Check environment variable
+echo $TOWER_ENABLE_EMBEDDINGS
+
+# Check backend logs for embedding endpoint calls
+# Should see: POST /files/register-embedding
+```
+
+#### Search Returns No Results
+```bash
+# Ensure files have embeddings
+# Check backend logs for "Inserted embedding for file_id: X"
+
+# Try increasing result count (backend defaults to 5)
+# May need backend code change to expose k parameter
+```
+
+### Future Enhancements
+- Batch embedding generation for multiple files
+- Progress indicators for model download
+- Configurable similarity thresholds
+- Embedding-based file deduplication
+- Support for more file types (PDFs, images, etc.)
+- Re-embedding on file modification

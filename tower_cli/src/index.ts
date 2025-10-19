@@ -3,7 +3,7 @@
 import { Command } from 'commander';
 import { init } from './commands/init.js';
 import { addWatch, removeWatch, listWatch } from './commands/watch.js';
-import { search } from './commands/search.js';
+import { search, semanticSearch } from './commands/search.js';
 import { get } from './commands/get.js';
 import { getRemote } from './commands/get-remote.js';
 
@@ -48,6 +48,14 @@ program
   .description('Search for files across all devices')
   .action(async (query) => {
     await search(query);
+  });
+
+program
+  .command('semantic-search <query>')
+  .description('Semantic search using AI embeddings')
+  .option('-k, --top <number>', 'Number of results', '5')
+  .action(async (query, options) => {
+    await semanticSearch(query, parseInt(options.top));
   });
 
 program
