@@ -220,7 +220,10 @@ src/
 ├── types/            # TypeScript type definitions
 │   └── index.ts
 ├── utils/            # Utilities
-│   ├── config.ts     # Config manager
+│   ├── config.
+
+
+ts     # Config manager
 │   └── logger.ts     # Colored logging
 └── index.ts          # Main CLI entry point
 ```
