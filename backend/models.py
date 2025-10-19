@@ -1,6 +1,7 @@
 from sqlmodel import SQLModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 
 
 class FileRecord(SQLModel, table=True):
@@ -39,3 +40,38 @@ class FileSearchResponse(SQLModel):
     created_time: datetime
     size: int
     file_type: str
+
+
+class EmbeddingRequest(BaseModel):
+    """
+    Request model for registering file embeddings.
+    Client sends this after registering file metadata.
+    """
+    file_id: int
+    embedding: List[float]
+
+
+class SemanticSearchRequest(BaseModel):
+    """
+    Request model for semantic search queries.
+    Client generates embedding from query text and sends it here.
+    """
+    query_embedding: List[float]
+    k: int = 5
+
+
+class SemanticSearchResult(BaseModel):
+    """
+    Response model for semantic search results.
+    Includes similarity score along with file metadata.
+    """
+    file_id: int
+    file_name: str
+    absolute_path: str
+    device: str
+    device_ip: str
+    device_user: str
+    last_modified_time: datetime
+    size: int
+    file_type: str
+    similarity_score: float

@@ -14,12 +14,16 @@ import subprocess
 import tempfile
 import shutil
 
-from models import FileRecord, FileSearchResponse
+from models import FileRecord, FileSearchResponse, EmbeddingRequest, SemanticSearchRequest, SemanticSearchResult
 from database import create_db_and_tables, get_session
 from logging_config import log_request_details, log_response_details, log_error_details, request_logger
 from ssh_key_manager import ssh_key_manager
+from vector_db import init_vector_db, VectorDatabase
+import numpy as np
 
 app = FastAPI(title="File Sync API", version="1.0.0")
+
+vector_db: Optional[VectorDatabase] = None
 
 def format_scp_path(path: str) -> str:
     """
@@ -105,6 +109,8 @@ def on_startup():
     """
     Initialize database and SSH keys on startup
     """
+    global vector_db
+    
     create_db_and_tables()
     
     try:
@@ -113,6 +119,13 @@ def on_startup():
         request_logger.info(f"Public key: {public_key[:50]}...")
     except Exception as e:
         request_logger.error(f"Failed to generate SSH keys: {e}")
+        raise
+    
+    try:
+        vector_db = init_vector_db()
+        request_logger.info("Vector database initialized for RAG search")
+    except Exception as e:
+        request_logger.error(f"Failed to initialize vector database: {e}")
         raise
 
 
@@ -402,6 +415,13 @@ def delete_file_metadata(file_id: int, session: Session = Depends(get_session)):
     session.delete(file_record)
     session.commit()
     
+    if vector_db:
+        try:
+            vector_db.delete_embedding(file_id)
+            request_logger.info(f"ENDPOINT /files/{file_id} DELETE | Deleted embedding for file_id: {file_id}")
+        except Exception as e:
+            request_logger.warning(f"ENDPOINT /files/{file_id} DELETE | Failed to delete embedding: {e}")
+    
     request_logger.info(f"ENDPOINT /files/{file_id} DELETE | Deleted file: {file_record.file_name} from device: {file_record.device}")
     
     return {
@@ -410,3 +430,129 @@ def delete_file_metadata(file_id: int, session: Session = Depends(get_session)):
         "file_name": file_record.file_name,
         "device": file_record.device
     }
+
+
+@app.post("/files/register-embedding")
+def register_embedding(
+    embedding_request: EmbeddingRequest,
+    session: Session = Depends(get_session)
+):
+    """
+    POST endpoint: Register embedding vector for a file
+    
+    Client generates embeddings locally from file content and sends them here.
+    The backend stores these embeddings in the vector database for semantic search.
+    
+    Parameters:
+    - embedding_request: JSON body containing file_id and embedding vector
+    
+    Returns:
+    - Success message
+    """
+    request_logger.info(f"ENDPOINT /files/register-embedding | file_id: {embedding_request.file_id}")
+    
+    if not vector_db:
+        raise HTTPException(status_code=500, detail="Vector database not initialized")
+    
+    statement = select(FileRecord).where(FileRecord.id == embedding_request.file_id)
+    file_record = session.exec(statement).first()
+    
+    if not file_record:
+        request_logger.warning(f"ENDPOINT /files/register-embedding | File not found: {embedding_request.file_id}")
+        raise HTTPException(status_code=404, detail=f"File with ID {embedding_request.file_id} not found")
+    
+    try:
+        embedding_array = np.array(embedding_request.embedding, dtype=np.float32)
+        
+        if embedding_array.shape[0] != 384:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid embedding dimension. Expected 384, got {embedding_array.shape[0]}"
+            )
+        
+        success = vector_db.insert(embedding_array, embedding_request.file_id)
+        
+        if success:
+            request_logger.info(f"ENDPOINT /files/register-embedding | Successfully registered embedding for file_id: {embedding_request.file_id}")
+            return {
+                "message": "Embedding registered successfully",
+                "file_id": embedding_request.file_id,
+                "file_name": file_record.file_name
+            }
+        else:
+            request_logger.warning(f"ENDPOINT /files/register-embedding | Embedding already exists for file_id: {embedding_request.file_id}")
+            return {
+                "message": "Embedding already exists for this file",
+                "file_id": embedding_request.file_id,
+                "file_name": file_record.file_name
+            }
+    
+    except Exception as e:
+        request_logger.error(f"ENDPOINT /files/register-embedding | Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to register embedding: {str(e)}")
+
+
+@app.post("/files/semantic-search", response_model=List[SemanticSearchResult])
+def semantic_search(
+    search_request: SemanticSearchRequest,
+    session: Session = Depends(get_session)
+):
+    """
+    POST endpoint: Semantic search for files using embedding similarity
+    
+    Client generates an embedding from the search query and sends it here.
+    Backend finds the most similar files using vector similarity search.
+    
+    Parameters:
+    - search_request: JSON body containing query_embedding and k (number of results)
+    
+    Returns:
+    - List of matching files with similarity scores
+    """
+    request_logger.info(f"ENDPOINT /files/semantic-search | k: {search_request.k}")
+    
+    if not vector_db:
+        raise HTTPException(status_code=500, detail="Vector database not initialized")
+    
+    try:
+        query_embedding = np.array(search_request.query_embedding, dtype=np.float32)
+        
+        if query_embedding.shape[0] != 384:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid embedding dimension. Expected 384, got {query_embedding.shape[0]}"
+            )
+        
+        similar_files = vector_db.get_file(query_embedding, k=search_request.k)
+        
+        if not similar_files:
+            request_logger.warning("ENDPOINT /files/semantic-search | No results found")
+            return []
+        
+        results = []
+        for file_id, distance in similar_files:
+            statement = select(FileRecord).where(FileRecord.id == file_id)
+            file_record = session.exec(statement).first()
+            
+            if file_record and file_record.id is not None:
+                similarity_score = 1.0 / (1.0 + distance)
+                
+                results.append(SemanticSearchResult(
+                    file_id=file_record.id,
+                    file_name=file_record.file_name,
+                    absolute_path=file_record.absolute_path,
+                    device=file_record.device,
+                    device_ip=file_record.device_ip,
+                    device_user=file_record.device_user,
+                    last_modified_time=file_record.last_modified_time,
+                    size=file_record.size,
+                    file_type=file_record.file_type,
+                    similarity_score=similarity_score
+                ))
+        
+        request_logger.info(f"ENDPOINT /files/semantic-search | Found {len(results)} results")
+        return results
+    
+    except Exception as e:
+        request_logger.error(f"ENDPOINT /files/semantic-search | Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")

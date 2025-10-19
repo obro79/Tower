@@ -14,7 +14,7 @@ from typing import List, Tuple, Optional
 # Vector database setup
 VECTOR_DB_PATH = 'vectors.db'
 FAISS_INDEX_PATH = 'faiss.index'
-EMBEDDING_DIMENSION = 768  # Default for Gemini embeddings
+EMBEDDING_DIMENSION = 384  # all-MiniLM-L6-v2 model dimension
 
 
 def init_vector_db(db_path: str = VECTOR_DB_PATH, dimension: int = EMBEDDING_DIMENSION):
