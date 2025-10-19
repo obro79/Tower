@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import axios from 'axios';
-import { Logger } from './logger';
+import { Logger } from './logger.js';
 
 const SSH_DIR = path.join(os.homedir(), '.ssh');
 const AUTHORIZED_KEYS_PATH = path.join(SSH_DIR, 'authorized_keys');

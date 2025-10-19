@@ -1,5 +1,5 @@
-import { ConfigManager } from '../utils/config';
-import { Logger } from '../utils/logger';
+import { ConfigManager } from '../utils/config.js';
+import { Logger } from '../utils/logger.js';
 
 const configManager = new ConfigManager();
 

@@ -1,7 +1,7 @@
 import { pipeline, env } from '@xenova/transformers';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Logger } from './logger';
+import { Logger } from './logger.js';
 
 env.allowLocalModels = false;
 env.useBrowserCache = false;

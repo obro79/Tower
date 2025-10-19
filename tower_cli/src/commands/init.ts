@@ -2,9 +2,9 @@ import * as os from 'os';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import axios from 'axios';
-import { ConfigManager } from '../utils/config';
-import { Logger } from '../utils/logger';
-import { sshSetup } from '../utils/ssh-setup';
+import { ConfigManager } from '../utils/config.js';
+import { Logger } from '../utils/logger.js';
+import { sshSetup } from '../utils/ssh-setup.js';
 
 const configManager = new ConfigManager();
 

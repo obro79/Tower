@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
-import { ConfigManager } from '../utils/config';
-import { Logger } from '../utils/logger';
-import { apiClient } from '../utils/api-client';
+import { ConfigManager } from '../utils/config.js';
+import { Logger } from '../utils/logger.js';
+import { apiClient } from '../utils/api-client.js';
 
 const configManager = new ConfigManager();
 

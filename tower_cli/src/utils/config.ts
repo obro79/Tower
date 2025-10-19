@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { Config, WatchedItem } from '../types';
+import { Config, WatchedItem } from '../types/index.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.tower');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');

@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { globSync } from 'glob';
-import { ConfigManager } from '../utils/config';
-import { apiClient } from '../utils/api-client';
-import { Logger } from '../utils/logger';
-import { generateEmbeddingFromFile, isEmbeddingEnabled } from '../utils/embedding';
+import { ConfigManager } from '../utils/config.js';
+import { apiClient } from '../utils/api-client.js';
+import { Logger } from '../utils/logger.js';
+import { generateEmbeddingFromFile, isEmbeddingEnabled } from '../utils/embedding.js';
 
 interface FileState {
   path: string;

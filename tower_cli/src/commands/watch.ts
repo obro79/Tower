@@ -3,10 +3,10 @@ import * as path from 'path';
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import inquirer from 'inquirer';
-import { ConfigManager } from '../utils/config';
-import { Logger } from '../utils/logger';
-import { WatchedItem } from '../types';
-import { apiClient } from '../utils/api-client';
+import { ConfigManager } from '../utils/config.js';
+import { Logger } from '../utils/logger.js';
+import { WatchedItem } from '../types/index.js';
+import { apiClient } from '../utils/api-client.js';
 import { globSync } from 'glob';
 
 const configManager = new ConfigManager();

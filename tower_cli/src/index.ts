@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { init } from './commands/init';
-import { addWatch, removeWatch, listWatch } from './commands/watch';
-import { search } from './commands/search';
-import { get } from './commands/get';
-import { getRemote } from './commands/get-remote';
+import { init } from './commands/init.js';
+import { addWatch, removeWatch, listWatch } from './commands/watch.js';
+import { search } from './commands/search.js';
+import { get } from './commands/get.js';
+import { getRemote } from './commands/get-remote.js';
 
 const program = new Command();
 

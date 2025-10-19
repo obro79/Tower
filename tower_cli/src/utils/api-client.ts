@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { ConfigManager } from './config';
+import { ConfigManager } from './config.js';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
