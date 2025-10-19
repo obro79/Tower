@@ -1,86 +1,74 @@
+import * as os from 'os';
+import * as dns from 'dns';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
-import { Device } from '../types';
 
 const configManager = new ConfigManager();
+
+function getLocalIp(): Promise<string> {
+  return new Promise((resolve) => {
+    dns.lookup(os.hostname(), (err, address) => {
+      if (err || !address) {
+        resolve('127.0.0.1');
+      } else {
+        resolve(address);
+      }
+    });
+  });
+}
 
 export async function init(): Promise<void> {
   console.log(chalk.bold.cyan('\nWelcome to Tower!\n'));
   console.log('Let\'s set up your file sync configuration.\n');
 
   try {
+    const deviceName = os.hostname();
+    const deviceUser = os.userInfo().username;
+    const deviceIp = await getLocalIp();
+
+    console.log(chalk.dim('Auto-detected device info:'));
+    console.log(chalk.dim(`  Device: ${deviceName}`));
+    console.log(chalk.dim(`  User: ${deviceUser}`));
+    console.log(chalk.dim(`  IP: ${deviceIp}\n`));
+
     const answers = await inquirer.prompt([
       {
-        type: 'confirm',
-        name: 'autoSync',
-        message: 'Enable automatic syncing?',
-        default: true
+        type: 'input',
+        name: 'backendUrl',
+        message: 'Backend API URL (e.g., http://192.168.1.10:8000):',
+        validate: (input) => {
+          if (!input) return 'Backend URL is required';
+          if (!input.startsWith('http://') && !input.startsWith('https://')) {
+            return 'URL must start with http:// or https://';
+          }
+          return true;
+        }
       },
       {
         type: 'number',
         name: 'syncInterval',
-        message: 'Sync interval (minutes):',
+        message: 'Auto-sync interval (minutes):',
         default: 5,
         validate: (input) => input > 0 || 'Must be greater than 0'
-      },
-      {
-        type: 'list',
-        name: 'conflictResolution',
-        message: 'How should conflicts be handled?',
-        choices: [
-          { name: 'Use latest version', value: 'latest' },
-          { name: 'Manual resolution', value: 'manual' },
-          { name: 'Keep both versions', value: 'keep-both' }
-        ],
-        default: 'latest'
-      },
-      {
-        type: 'confirm',
-        name: 'addDevice',
-        message: 'Would you like to add this device now?',
-        default: true
       }
     ]);
 
-    // Update settings
-    configManager.setSetting('autoSync', answers.autoSync);
-    configManager.setSetting('syncInterval', answers.syncInterval);
-    configManager.setSetting('conflictResolution', answers.conflictResolution);
+    configManager.initialize(
+      answers.backendUrl,
+      answers.syncInterval,
+      deviceName,
+      deviceIp,
+      deviceUser
+    );
 
-    Logger.success('Settings configured');
-
-    // Add device if requested
-    if (answers.addDevice) {
-      const deviceAnswers = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'name',
-          message: 'Device name:',
-          default: require('os').hostname(),
-          validate: (input) => input.length > 0 || 'Name is required'
-        }
-      ]);
-
-      const device: Device = {
-        id: `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: deviceAnswers.name,
-        addedAt: new Date().toISOString(),
-        status: 'online'
-      };
-
-      configManager.addDevice(device);
-      Logger.success(`Device added: ${device.name}`);
-    }
-
-    console.log();
-    Logger.success('Tower is ready to use!');
+    Logger.success('Configuration saved!');
     console.log();
     console.log(chalk.dim('Next steps:'));
-    console.log(chalk.dim('  - Add files to watch: tower watch add <path>'));
-    console.log(chalk.dim('  - Start syncing: tower sync'));
-    console.log(chalk.dim('  - View status: tower status'));
+    console.log(chalk.dim('  - Add files to watch: tower watch <path>'));
+    console.log(chalk.dim('  - Search for files: tower search <query>'));
+    console.log(chalk.dim('  - Download files: tower get <filename>'));
     console.log();
   } catch (error: any) {
     if (error.isTtyError || error.name === 'ExitPromptError') {

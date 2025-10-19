@@ -1,22 +1,43 @@
 import * as path from 'path';
 import * as os from 'os';
 import inquirer from 'inquirer';
+import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
 import { apiClient, FileRecord } from '../utils/api-client';
 
-/**
- * Get (search and download) a file from a remote device
- * Two-step process:
- * 1. Search for files matching the filename/pattern
- * 2. User selects which file to download
- * 3. Download the selected file
- */
+const configManager = new ConfigManager();
+
+function isNaturalLanguageQuery(query: string): boolean {
+  const hasMultipleWords = query.trim().split(/\s+/).length > 1;
+  const hasNoWildcards = !query.includes('*');
+  const hasNoExtension = !query.includes('.');
+  
+  return hasMultipleWords && hasNoWildcards && hasNoExtension;
+}
+
 export async function get(
-  filename: string,
+  filename?: string,
   destination?: string
 ): Promise<void> {
   try {
-    // Check if backend is available
+    if (!configManager.isInitialized()) {
+      Logger.error('Tower not initialized. Run "tower init" first.');
+      return;
+    }
+
+    if (!filename) {
+      Logger.error('Please provide a filename or search query');
+      Logger.info('Usage: tower get <filename>');
+      Logger.info('       tower get "research paper about AI"  (natural language - not implemented)');
+      return;
+    }
+
+    if (isNaturalLanguageQuery(filename)) {
+      Logger.warning('Natural language search is not yet implemented');
+      Logger.info('For now, use filename patterns like: tower get "*.pdf" or tower get "paper"');
+      return;
+    }
+
     const isBackendRunning = await apiClient.healthCheck();
     if (!isBackendRunning) {
       Logger.error('Backend server not running');
@@ -24,7 +45,6 @@ export async function get(
       return;
     }
 
-    // Step 1: Search for files matching the filename/pattern
     Logger.info(`Searching for files matching "${filename}"...`);
     const results = await apiClient.searchFiles(filename);
 
@@ -35,15 +55,12 @@ export async function get(
 
     Logger.success(`Found ${results.length} matching file${results.length > 1 ? 's' : ''}`);
 
-    // Step 2: If multiple matches, ask user to select
     let selectedFile: FileRecord;
 
     if (results.length === 1) {
-      // Only one match, use it directly
       selectedFile = results[0];
       Logger.info(`Using: ${selectedFile.file_name} from ${selectedFile.device}`);
     } else {
-      // Multiple matches, show interactive selection
       const choices = results.map((file) => ({
         name: formatFileChoice(file),
         value: file,
@@ -61,7 +78,6 @@ export async function get(
       selectedFile = answer.selectedFile;
     }
 
-    // Step 3: Download the selected file
     await downloadFile(selectedFile, destination);
 
   } catch (error: any) {
