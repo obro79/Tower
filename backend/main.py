@@ -1,21 +1,24 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlmodel import Session, select
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 from models import File
 from database import init_db, get_session
 
-app = FastAPI(title="File Sync API", version="1.0.0")
 
-
-@app.on_event("startup")
-def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """
     Initialize database on startup
     """
     init_db()
+    yield
+
+
+app = FastAPI(title="File Sync API", version="1.0.0", lifespan=lifespan)
 
 
 @app.get("/")
@@ -119,7 +122,7 @@ def register_file(
             existing_file.alias = file_metadata.alias
             existing_file.size = file_metadata.size
             existing_file.file_type = file_metadata.file_type
-            existing_file.modified_at = datetime.utcnow()
+            existing_file.modified_at = datetime.now(timezone.utc)
             
             session.add(existing_file)
             session.commit()

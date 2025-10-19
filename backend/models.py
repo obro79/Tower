@@ -1,6 +1,11 @@
 from sqlmodel import SQLModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+
+
+def _utcnow():
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 
 
 class File(SQLModel, table=True):
@@ -26,8 +31,8 @@ class File(SQLModel, table=True):
     path: str = Field(unique=True)
     alias: str = Field(index=True)
     size: int
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
-    modified_at: datetime = Field(default_factory=datetime.utcnow)
+    uploaded_at: datetime = Field(default_factory=_utcnow)
+    modified_at: datetime = Field(default_factory=_utcnow)
     file_type: Optional[str] = None
     
     def __repr__(self):

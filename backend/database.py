@@ -3,25 +3,37 @@ Database module for distributed file transfer system.
 Handles file metadata storage using SQLModel ORM with SQLite.
 """
 
-from sqlmodel import SQLModel, create_engine, Session
-from datetime import datetime
+from sqlmodel import SQLModel, create_engine, Session, select
+from datetime import datetime, timezone
 import os
+from contextvars import ContextVar
 from models import File
 
 DATABASE_PATH = 'files.db'
 engine = create_engine(f'sqlite:///{DATABASE_PATH}', echo=False)
 
+_test_engine: ContextVar = ContextVar('_test_engine', default=None)
+
 
 def init_db():
     """Initialize the database, creating all tables."""
-    SQLModel.metadata.create_all(engine)
-    print(f"Database initialized at {DATABASE_PATH}")
+    current_engine = _get_engine()
+    SQLModel.metadata.create_all(current_engine)
+    if current_engine == engine:
+        print(f"Database initialized at {DATABASE_PATH}")
 
 
 def get_session():
     """Get a database session for FastAPI dependency injection."""
-    with Session(engine) as session:
+    current_engine = _get_engine()
+    with Session(current_engine) as session:
         yield session
+
+
+def _get_engine():
+    """Get the current engine (test or production)."""
+    test_engine = _test_engine.get()
+    return test_engine if test_engine is not None else engine
 
 
 def add_file(filename, device, path, alias, size, file_type=None):
@@ -42,9 +54,11 @@ def add_file(filename, device, path, alias, size, file_type=None):
     Raises:
         Exception: If database operation fails
     """
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        existing_file = session.query(File).filter_by(path=path).first()
+        statement = select(File).where(File.path == path)
+        existing_file = session.exec(statement).first()
         if existing_file:
             print(f"File with path '{path}' already exists in database.")
             return None
@@ -85,9 +99,11 @@ def get_file(filename):
     Returns:
         File object if found, None otherwise
     """
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        file = session.query(File).filter_by(filename=filename).first()
+        statement = select(File).where(File.filename == filename)
+        file = session.exec(statement).first()
         if file:
             session.expunge(file)
         return file
@@ -105,9 +121,11 @@ def get_file_by_id(file_id):
     Returns:
         File object if found, None otherwise
     """
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        file = session.query(File).filter_by(id=file_id).first()
+        statement = select(File).where(File.id == file_id)
+        file = session.exec(statement).first()
         if file:
             session.expunge(file)
         return file
@@ -122,9 +140,11 @@ def get_all_files():
     Returns:
         List of File objects
     """
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        files = session.query(File).all()
+        statement = select(File)
+        files = session.exec(statement).all()
         for file in files:
             session.expunge(file)
         return files
@@ -142,9 +162,11 @@ def get_files_by_owner(alias):
     Returns:
         List of File objects
     """
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        files = session.query(File).filter_by(alias=alias).all()
+        statement = select(File).where(File.alias == alias)
+        files = session.exec(statement).all()
         for file in files:
             session.expunge(file)
         return files
@@ -162,9 +184,11 @@ def get_files_by_device(device):
     Returns:
         List of File objects
     """
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        files = session.query(File).filter_by(device=device).all()
+        statement = select(File).where(File.device == device)
+        files = session.exec(statement).all()
         for file in files:
             session.expunge(file)
         return files
@@ -183,9 +207,11 @@ def update_file(filename, **kwargs):
     Returns:
         Updated File object if successful, None if file not found
     """
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        file = session.query(File).filter_by(filename=filename).first()
+        statement = select(File).where(File.filename == filename)
+        file = session.exec(statement).first()
         if not file:
             print(f"File '{filename}' not found.")
             return None
@@ -195,7 +221,7 @@ def update_file(filename, **kwargs):
             if key in allowed_fields and hasattr(file, key):
                 setattr(file, key, value)
         
-        file.modified_at = datetime.utcnow()
+        file.modified_at = datetime.now(timezone.utc)
         
         session.commit()
         session.refresh(file)
@@ -221,9 +247,11 @@ def delete_file(filename):
     Returns:
         True if file was deleted, False if file not found
     """
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        file = session.query(File).filter_by(filename=filename).first()
+        statement = select(File).where(File.filename == filename)
+        file = session.exec(statement).first()
         if not file:
             print(f"File '{filename}' not found.")
             return False
@@ -248,9 +276,14 @@ def delete_all_files():
     Returns:
         Number of files deleted
     """
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        count = session.query(File).delete()
+        statement = select(File)
+        files = session.exec(statement).all()
+        count = len(files)
+        for file in files:
+            session.delete(file)
         session.commit()
         print(f"Deleted {count} files from database.")
         return count
@@ -269,11 +302,13 @@ def get_database_stats():
     Returns:
         Dictionary with stats (total_files, total_size, etc.)
     """
-    from sqlalchemy import func
-    session = Session(engine)
+    current_engine = _get_engine()
+    session = Session(current_engine)
     try:
-        total_files = session.query(File).count()
-        total_size = session.query(func.sum(File.size)).scalar() or 0
+        statement = select(File)
+        files = session.exec(statement).all()
+        total_files = len(files)
+        total_size = sum(file.size for file in files)
         
         return {
             'total_files': total_files,
