@@ -27,8 +27,11 @@ export async function get(
 
     if (!filename) {
       Logger.error('Please provide a filename or search query');
-      Logger.info('Usage: tower get <filename>');
-      Logger.info('       tower get "research paper about AI"  (natural language - not implemented)');
+      Logger.info('Usage: tower get <filename> [destination]');
+      Logger.info('Examples:');
+      Logger.info('  tower get "report.pdf"                    # Save to current directory');
+      Logger.info('  tower get "report.pdf" ~/Documents/       # Save to specific directory');
+      Logger.info('  tower get "report.pdf" ./my-report.pdf    # Save with custom name');
       return;
     }
 
@@ -107,7 +110,7 @@ async function downloadFile(
   Logger.info(`Size: ${(fileRecord.size / 1024 / 1024).toFixed(2)} MB`);
 
   // Determine destination path
-  const dest = destination || path.join(os.homedir(), 'Downloads', fileRecord.file_name);
+  const dest = destination || path.join(process.cwd(), fileRecord.file_name);
 
   // Download file via SCP
   Logger.info('Initiating file transfer via SCP...');
