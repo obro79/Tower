@@ -35,6 +35,7 @@ async function showInteractiveMenu(): Promise<void> {
     { name: purple('watch') + chalk.dim(' - Add a file or directory to watch list'), value: 'watch' },
     { name: purple('watch-list') + chalk.dim(' - List all watched items'), value: 'watch-list' },
     { name: purple('search') + chalk.dim(' - Search for files across all devices'), value: 'search' },
+    { name: purple('search-semantic') + chalk.dim(' - Semantic search using AI embeddings'), value: 'search-semantic' },
     { name: purple('get') + chalk.dim(' - Download a file from network'), value: 'get' },
     { name: chalk.gray('Exit'), value: 'exit' },
   ];
@@ -87,6 +88,27 @@ async function showInteractiveMenu(): Promise<void> {
       ]);
       if (query) {
         await search(query);
+      }
+      break;
+
+    case 'search-semantic':
+      const { semanticQuery } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'semanticQuery',
+          message: purple('Enter semantic search query:'),
+        },
+      ]);
+      const { topResults } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'topResults',
+          message: purple('Number of results (default 5):'),
+          default: '5',
+        },
+      ]);
+      if (semanticQuery) {
+        await semanticSearch(semanticQuery, parseInt(topResults) || 5);
       }
       break;
 
