@@ -6,12 +6,32 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+#### Client IP Detection Endpoint
+- **New endpoint**: `GET /client-info`
+  - Returns client's IP address as seen by the backend
+  - More reliable than client-side IP detection (avoids loopback/IPv6 issues)
+  - Called by `tower init` to auto-detect network-facing IP
+  - Response includes:
+    - `ip`: Client's IP from backend's perspective
+    - `hostname`: Reserved for future use
+  - Solves issue where Linux clients detected `127.0.1.1` instead of real IP
+  - Solves issue where Windows clients detected IPv6 instead of IPv4
+
 #### Windows Path Support
 - **New function**: `format_scp_path()` in `main.py`
   - Converts Windows backslashes to forward slashes for SCP compatibility
   - Transforms Windows drive letters (C:) to Cygwin format (/C/)
   - Applied to both source and destination paths in file transfers
   - Fixes SCP errors with Windows paths like `C:\Users\...`
+  
+### Fixed
+
+#### Path Conversion Bug
+- **Issue**: `format_scp_path()` was creating double slashes (`/C//Users/...`)
+- **Cause**: Only skipped `C:` but not the trailing `/` after conversion
+- **Solution**: Use `.lstrip('/')` to remove all leading slashes after drive letter
+- **Before**: `C:\Users\file.txt` → `/C//Users/file.txt` ❌
+- **After**: `C:\Users\file.txt` → `/C/Users/file.txt` ✅
 
 #### SSH Key Management System
 - **New file**: `ssh_key_manager.py` - Automated SSH key management

@@ -24,13 +24,13 @@ app = FastAPI(title="File Sync API", version="1.0.0")
 def format_scp_path(path: str) -> str:
     """
     Format a file path for SCP compatibility.
-    Converts Windows backslashes to forward slashes and escapes special characters.
+    Converts Windows paths (C:\...) to Cygwin format (/C/...).
     """
     path = path.replace('\\', '/')
     
-    if ':' in path and not path.startswith('/'):
-        drive_letter = path[0]
-        rest = path[2:]
+    if len(path) >= 2 and path[1] == ':':
+        drive_letter = path[0].upper()
+        rest = path[2:].lstrip('/')
         path = f"/{drive_letter}/{rest}"
     
     return path
@@ -122,6 +122,28 @@ def read_root():
     Health check endpoint
     """
     return {"status": "File Sync API is running"}
+
+
+@app.get("/client-info")
+def get_client_info(request: Request):
+    """
+    GET endpoint: Return client's IP address as seen by the backend
+    
+    Clients call this during 'tower init' to discover their network-facing IP address.
+    This is more reliable than client-side detection (which can return loopback/IPv6).
+    
+    Returns:
+    - ip: Client's IP address from backend's perspective
+    - hostname: Client's hostname if available
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    
+    request_logger.info(f"ENDPOINT /client-info | Client IP: {client_ip}")
+    
+    return {
+        "ip": client_ip,
+        "hostname": None
+    }
 
 
 @app.get("/ssh/public-key")

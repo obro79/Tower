@@ -325,3 +325,97 @@ Backend also received fix for Windows path handling:
 - Added `format_scp_path()` function to convert `C:\Users\...` to `/C/Users/...`
 - SCP now works correctly with Windows file paths
 
+
+---
+
+## [Bugfix] - 2025-10-19 (Client IP Detection Fix)
+
+### Changed - Replaced Client-Side IP Detection with Backend Detection
+
+#### Removed Client-Side IP Detection
+- **Removed**: `getLocalIp()` function from `src/commands/init.ts`
+- **Removed**: DNS lookup logic that was unreliable across platforms
+- **Removed**: Network interface iteration fallback
+- **Reason**: Client-side detection was problematic:
+  - Linux: Returned loopback `127.0.1.1` from `/etc/hosts`
+  - Windows: Returned IPv6 link-local `fe80::...` instead of IPv4
+  - macOS: Sometimes worked, sometimes didn't
+
+#### Added Backend-Driven IP Detection
+- **New function**: `getDeviceIpFromBackend(backendUrl)` in `src/commands/init.ts`
+  - Calls `GET /client-info` on backend
+  - Backend returns client's IP as seen from server perspective
+  - Always returns correct network-facing IPv4 address
+  - Timeout of 5 seconds with graceful fallback
+
+#### User Experience Improvements
+- **Auto-detection**: IP is now automatically detected without user knowing
+- **Fallback prompt**: If backend unreachable, prompts user to enter IP manually
+- **Validation**: Manual IP input validated with IPv4 regex
+- **Confirmation**: Shows detected IP in configuration summary
+- **Better logging**: Clear messages about detection status
+
+### Flow Comparison
+
+**Before (Client-Side):**
+```typescript
+// 1. Try DNS lookup of hostname
+dns.lookup(os.hostname(), { family: 4 }, ...)
+// Returns: 127.0.1.1 (Linux) or fe80::... (Windows) ❌
+
+// 2. Fallback to network interfaces
+for (const addr of networkInterfaces) {
+  if (addr.family === 'IPv4' && !addr.internal) ...
+}
+// Sometimes works, sometimes returns wrong interface ❌
+```
+
+**After (Backend-Driven):**
+```typescript
+// 1. Ask backend what IP it sees
+const response = await axios.get(`${backendUrl}/client-info`);
+// Returns: 192.168.50.142 ✅
+
+// 2. If backend unreachable, prompt user
+if (!deviceIp) {
+  const answer = await inquirer.prompt({ name: 'deviceIp', ... });
+}
+```
+
+### Benefits
+
+1. **Accuracy**: Backend sees the actual IP used for network communication
+2. **Simplicity**: No complex platform-specific detection logic
+3. **Reliability**: Works across Linux, macOS, and Windows
+4. **Future-proof**: Backend can add hostname resolution, DNS lookups, etc.
+5. **Fallback**: Graceful degradation if backend unreachable
+
+### Technical Details
+
+**Backend Response:**
+```json
+{
+  "ip": "192.168.50.142",
+  "hostname": null
+}
+```
+
+**Client Request:**
+```typescript
+GET http://192.168.50.182:8000/client-info
+Timeout: 5000ms
+```
+
+**Fallback Behavior:**
+- If request fails (timeout, network error, etc.)
+- Prompts user to manually enter IP
+- Validates IPv4 format with regex: `/^(\d{1,3}\.){3}\d{1,3}$/`
+
+### Files Modified
+- `src/commands/init.ts` - Replaced IP detection logic
+- `CHANGELOG.md` - This entry
+
+### Related Backend Changes
+Backend added `GET /client-info` endpoint to support this feature.
+See backend CHANGELOG.md for details.
+

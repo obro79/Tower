@@ -1,35 +1,21 @@
 import * as os from 'os';
-import * as dns from 'dns';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
+import axios from 'axios';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
 import { sshSetup } from '../utils/ssh-setup';
 
 const configManager = new ConfigManager();
 
-function getLocalIp(): Promise<string> {
-  return new Promise((resolve) => {
-    dns.lookup(os.hostname(), { family: 4 }, (err, address) => {
-      if (err || !address) {
-        const networkInterfaces = os.networkInterfaces();
-        for (const interfaceName in networkInterfaces) {
-          const addresses = networkInterfaces[interfaceName];
-          if (addresses) {
-            for (const addr of addresses) {
-              if (addr.family === 'IPv4' && !addr.internal) {
-                resolve(addr.address);
-                return;
-              }
-            }
-          }
-        }
-        resolve('127.0.0.1');
-      } else {
-        resolve(address);
-      }
-    });
-  });
+async function getDeviceIpFromBackend(backendUrl: string): Promise<string> {
+  try {
+    const response = await axios.get(`${backendUrl}/client-info`, { timeout: 5000 });
+    return response.data.ip;
+  } catch (error: any) {
+    Logger.warning('Could not auto-detect IP from backend, will prompt user');
+    return '';
+  }
 }
 
 export async function init(): Promise<void> {
@@ -39,12 +25,10 @@ export async function init(): Promise<void> {
   try {
     const deviceName = os.hostname();
     const deviceUser = os.userInfo().username;
-    const deviceIp = await getLocalIp();
 
     console.log(chalk.dim('Auto-detected device info:'));
     console.log(chalk.dim(`  Device: ${deviceName}`));
-    console.log(chalk.dim(`  User: ${deviceUser}`));
-    console.log(chalk.dim(`  IP: ${deviceIp}\n`));
+    console.log(chalk.dim(`  User: ${deviceUser}\n`));
 
     const answers = await inquirer.prompt([
       {
@@ -69,6 +53,31 @@ export async function init(): Promise<void> {
     ]);
 
     console.log();
+    Logger.info('Detecting device IP address from backend...');
+    
+    let deviceIp = await getDeviceIpFromBackend(answers.backendUrl);
+    
+    if (!deviceIp || deviceIp === 'unknown') {
+      Logger.warning('Auto-detection failed');
+      const ipAnswer = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'deviceIp',
+          message: 'Enter this device\'s IP address:',
+          validate: (input) => {
+            if (!input) return 'IP address is required';
+            const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+            if (!ipv4Regex.test(input)) return 'Invalid IPv4 address';
+            return true;
+          }
+        }
+      ]);
+      deviceIp = ipAnswer.deviceIp;
+    } else {
+      Logger.success(`Detected IP: ${deviceIp}`);
+    }
+
+    console.log();
     Logger.info('Setting up SSH access for passwordless file transfers...');
     
     try {
@@ -89,6 +98,11 @@ export async function init(): Promise<void> {
     );
 
     Logger.success('Configuration saved!');
+    console.log();
+    console.log(chalk.dim('Configuration summary:'));
+    console.log(chalk.dim(`  Backend: ${answers.backendUrl}`));
+    console.log(chalk.dim(`  Device IP: ${deviceIp}`));
+    console.log(chalk.dim(`  Username: ${deviceUser}`));
     console.log();
     console.log(chalk.dim('Next steps:'));
     console.log(chalk.dim('  - Add files to watch: tower watch <path>'));
