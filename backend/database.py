@@ -1,32 +1,30 @@
 """
 Database module for distributed file transfer system.
-Handles file metadata storage using SQLAlchemy ORM with SQLite.
+Handles file metadata storage using SQLModel ORM with SQLite.
 """
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, UniqueConstraint
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel, create_engine, Session
 from datetime import datetime
 import os
-import sqlalchemy
+from models import File
 
-# Database setup
 DATABASE_PATH = 'files.db'
 engine = create_engine(f'sqlite:///{DATABASE_PATH}', echo=False)
-Base = declarative_base()
-Session = sessionmaker(bind=engine)
-
-
 
 
 def init_db():
     """Initialize the database, creating all tables."""
-    Base.metadata.create_all(engine)
+    SQLModel.metadata.create_all(engine)
     print(f"Database initialized at {DATABASE_PATH}")
 
 
+def get_session():
+    """Get a database session for FastAPI dependency injection."""
+    with Session(engine) as session:
+        yield session
+
+
 def add_file(filename, device, path, alias, size, file_type=None):
-    # TODO: ADD LOGGING
     """
     Add a new file to the database.
     
@@ -44,19 +42,16 @@ def add_file(filename, device, path, alias, size, file_type=None):
     Raises:
         Exception: If database operation fails
     """
-    session = Session()
+    session = Session(engine)
     try:
-        # Check if file path already exists (path must be unique)
         existing_file = session.query(File).filter_by(path=path).first()
         if existing_file:
             print(f"File with path '{path}' already exists in database.")
             return None
         
-        # Extract file type if not provided
         if file_type is None and '.' in filename:
             file_type = filename.rsplit('.', 1)[1].lower()
         
-        # Create new file entry
         new_file = File(
             filename=filename,
             device=device,
@@ -90,11 +85,10 @@ def get_file(filename):
     Returns:
         File object if found, None otherwise
     """
-    session = Session()
+    session = Session(engine)
     try:
         file = session.query(File).filter_by(filename=filename).first()
         if file:
-            # Detach from session to use outside
             session.expunge(file)
         return file
     finally:
@@ -111,7 +105,7 @@ def get_file_by_id(file_id):
     Returns:
         File object if found, None otherwise
     """
-    session = Session()
+    session = Session(engine)
     try:
         file = session.query(File).filter_by(id=file_id).first()
         if file:
@@ -128,10 +122,9 @@ def get_all_files():
     Returns:
         List of File objects
     """
-    session = Session()
+    session = Session(engine)
     try:
         files = session.query(File).all()
-        # Detach all from session
         for file in files:
             session.expunge(file)
         return files
@@ -149,7 +142,7 @@ def get_files_by_owner(alias):
     Returns:
         List of File objects
     """
-    session = Session()
+    session = Session(engine)
     try:
         files = session.query(File).filter_by(alias=alias).all()
         for file in files:
@@ -169,7 +162,7 @@ def get_files_by_device(device):
     Returns:
         List of File objects
     """
-    session = Session()
+    session = Session(engine)
     try:
         files = session.query(File).filter_by(device=device).all()
         for file in files:
@@ -190,20 +183,18 @@ def update_file(filename, **kwargs):
     Returns:
         Updated File object if successful, None if file not found
     """
-    session = Session()
+    session = Session(engine)
     try:
         file = session.query(File).filter_by(filename=filename).first()
         if not file:
             print(f"File '{filename}' not found.")
             return None
         
-        # Update allowed fields
         allowed_fields = ['device', 'path', 'alias', 'size', 'file_type']
         for key, value in kwargs.items():
             if key in allowed_fields and hasattr(file, key):
                 setattr(file, key, value)
         
-        # Update modified_at timestamp
         file.modified_at = datetime.utcnow()
         
         session.commit()
@@ -230,7 +221,7 @@ def delete_file(filename):
     Returns:
         True if file was deleted, False if file not found
     """
-    session = Session()
+    session = Session(engine)
     try:
         file = session.query(File).filter_by(filename=filename).first()
         if not file:
@@ -257,7 +248,7 @@ def delete_all_files():
     Returns:
         Number of files deleted
     """
-    session = Session()
+    session = Session(engine)
     try:
         count = session.query(File).delete()
         session.commit()
@@ -278,12 +269,11 @@ def get_database_stats():
     Returns:
         Dictionary with stats (total_files, total_size, etc.)
     """
-    session = Session()
+    from sqlalchemy import func
+    session = Session(engine)
     try:
         total_files = session.query(File).count()
-        total_size = session.query(File).with_entities(
-            sqlalchemy.func.sum(File.size)
-        ).scalar() or 0
+        total_size = session.query(func.sum(File.size)).scalar() or 0
         
         return {
             'total_files': total_files,
@@ -294,7 +284,6 @@ def get_database_stats():
         session.close()
 
 
-# Initialize database on module import
 if __name__ != "__main__":
     if not os.path.exists(DATABASE_PATH):
         init_db()
