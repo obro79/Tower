@@ -7,7 +7,6 @@ import { init } from './commands/init';
 import { addWatch, removeWatch, listWatch } from './commands/watch';
 import { search } from './commands/search';
 import { get } from './commands/get';
-import { getRemote } from './commands/get-remote';
 import { ConfigManager } from './utils/config';
 import { displayLogo } from './utils/logo';
 
@@ -37,7 +36,6 @@ async function showInteractiveMenu(): Promise<void> {
     { name: purple('watch-list') + chalk.dim(' - List all watched items'), value: 'watch-list' },
     { name: purple('search') + chalk.dim(' - Search for files across all devices'), value: 'search' },
     { name: purple('get') + chalk.dim(' - Download a file from network'), value: 'get' },
-    { name: purple('get-remote') + chalk.dim(' - List all files in backend registry'), value: 'get-remote' },
     { name: chalk.gray('Exit'), value: 'exit' },
   ];
 
@@ -110,16 +108,6 @@ async function showInteractiveMenu(): Promise<void> {
       await get(filename || undefined, destination || undefined);
       break;
 
-    case 'get-remote':
-      if (!configManager.isInitialized()) {
-        await init();
-        if (!configManager.isInitialized()) {
-          return;
-        }
-      }
-      await getRemote();
-      break;
-
     case 'exit':
       console.log(chalk.dim('Goodbye!'));
       process.exit(0);
@@ -185,18 +173,6 @@ program
     await get(filename, options.destination);
   });
 
-program
-  .command('get-remote')
-  .description('List all files in backend registry (coming soon)')
-  .action(async () => {
-    if (!configManager.isInitialized()) {
-      await init();
-      if (!configManager.isInitialized()) {
-        return;
-      }
-    }
-    await getRemote();
-  });
 
 // If no command provided, check if initialized and show interactive menu
 (async () => {
