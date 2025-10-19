@@ -19,6 +19,7 @@ import {
   showConfigHelp,
   showSearchHelp
 } from './utils/help';
+import { showInteractivePicker, executeCommand } from './utils/interactive';
 
 const program = new Command();
 const configManager = new ConfigManager();
@@ -266,23 +267,42 @@ program
 // Error handling
 program.exitOverride();
 
-// Show welcome screen if no command provided
+// Show interactive picker if no command provided
 if (process.argv.length === 2) {
-  showWelcome();
-  process.exit(0);
-}
+  (async () => {
+    const selectedCommand = await showInteractivePicker();
 
-// Show help if help flag is used
-if (process.argv.includes('-h') || process.argv.includes('--help')) {
-  showMainHelp();
-  process.exit(0);
-}
+    if (selectedCommand) {
+      const commandArgs = executeCommand(selectedCommand);
 
-try {
-  program.parse(process.argv);
-} catch (error: any) {
-  if (error.code !== 'commander.help' && error.code !== 'commander.helpDisplayed') {
-    Logger.error(error.message);
-    process.exit(1);
+      if (commandArgs.length > 0) {
+        // Re-parse with the selected command
+        process.argv = ['node', 'tower', ...commandArgs];
+        try {
+          program.parse(process.argv);
+        } catch (error: any) {
+          if (error.code !== 'commander.help' && error.code !== 'commander.helpDisplayed') {
+            Logger.error(error.message);
+            process.exit(1);
+          }
+        }
+      }
+    }
+    process.exit(0);
+  })();
+} else {
+  // Show help if help flag is used
+  if (process.argv.includes('-h') || process.argv.includes('--help')) {
+    showMainHelp();
+    process.exit(0);
+  }
+
+  try {
+    program.parse(process.argv);
+  } catch (error: any) {
+    if (error.code !== 'commander.help' && error.code !== 'commander.helpDisplayed') {
+      Logger.error(error.message);
+      process.exit(1);
+    }
   }
 }
