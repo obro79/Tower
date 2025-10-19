@@ -139,6 +139,7 @@ Search for files within your watch list.
 tower search config
 
 # Search by filename only
+
 tower search config --name
 
 # Search file contents

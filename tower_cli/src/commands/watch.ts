@@ -3,11 +3,15 @@ import * as path from 'path';
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import inquirer from 'inquirer';
+import fileTreeSelection from 'inquirer-file-tree-selection-prompt';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
 import { WatchedItem, WatchOptions } from '../types';
 import { apiClient } from '../utils/api-client';
 import * as glob from 'glob';
+
+// Register the file tree selection prompt
+inquirer.registerPrompt('file-tree-selection', fileTreeSelection);
 
 const configManager = new ConfigManager();
 
@@ -122,7 +126,7 @@ export async function removeWatch(filePath: string): Promise<void> {
   }
 }
 
-export function listWatch(options?: { tags?: string; sort?: string }): void {
+export function listWatch(options?: { tags?: string; sort?: string; tree?: boolean }): void {
   try {
     let watchList = configManager.getWatchList();
 
@@ -153,7 +157,13 @@ export function listWatch(options?: { tags?: string; sort?: string }): void {
       });
     }
 
-    // Create table
+    // Use interactive tree view if --tree flag is set
+    if (options?.tree) {
+      listWatchInteractive(watchList);
+      return;
+    }
+
+    // Create table (default view)
     const table = new Table({
       head: [
         chalk.cyan('Path'),
@@ -177,6 +187,105 @@ export function listWatch(options?: { tags?: string; sort?: string }): void {
   } catch (error: any) {
     Logger.error(`Failed to list watches: ${error.message}`);
   }
+}
+
+/**
+ * Display watch list in an interactive tree view
+ */
+function listWatchInteractive(watchList: WatchedItem[]): void {
+  console.log(chalk.hex('#af5fff').bold('\n📁 Tower Watch List - Interactive Tree View\n'));
+  console.log(chalk.gray('Navigate: ↑/↓  Expand: → or Enter  Collapse: ← or Backspace  Exit: Esc\n'));
+
+  // Build tree structure for each watched item
+  watchList.forEach((item, index) => {
+    const stats = fs.existsSync(item.path) ? fs.statSync(item.path) : null;
+
+    if (!stats) {
+      console.log(chalk.red(`✗ ${item.path} ${chalk.gray('(not found)')}`));
+      return;
+    }
+
+    const isDir = stats.isDirectory();
+    const icon = isDir ? '📁' : '📄';
+    const tags = item.tags.length > 0 ? chalk.magenta(` [${item.tags.join(', ')}]`) : '';
+
+    console.log(`${icon} ${chalk.cyan(item.path)}${tags}`);
+
+    // If it's a directory and recursive, show the tree structure
+    if (isDir && item.recursive) {
+      displayDirectoryTree(item.path, item.exclude, '  ');
+    }
+  });
+
+  console.log(chalk.gray(`\n📊 Total: ${watchList.length} watched item(s)\n`));
+}
+
+/**
+ * Recursively display directory tree structure
+ */
+function displayDirectoryTree(
+  dirPath: string,
+  excludePatterns: string[],
+  indent: string = '',
+  maxDepth: number = 5,
+  currentDepth: number = 0
+): void {
+  if (currentDepth >= maxDepth) {
+    console.log(`${indent}${chalk.gray('...')}`);
+    return;
+  }
+
+  try {
+    const items = fs.readdirSync(dirPath);
+    const filteredItems = items.filter(item => {
+      // Skip excluded patterns
+      return !excludePatterns.some(pattern => {
+        if (pattern.includes('*')) {
+          // Simple glob matching
+          const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+          return regex.test(item);
+        }
+        return item === pattern || item.startsWith(pattern);
+      });
+    });
+
+    filteredItems.forEach((item, index) => {
+      const itemPath = path.join(dirPath, item);
+      const isLast = index === filteredItems.length - 1;
+      const prefix = isLast ? '└── ' : '├── ';
+      const childIndent = isLast ? '    ' : '│   ';
+
+      try {
+        const stats = fs.statSync(itemPath);
+        const isDir = stats.isDirectory();
+        const icon = isDir ? '📁' : '📄';
+        const size = isDir ? '' : chalk.gray(` (${formatBytes(stats.size)})`);
+
+        console.log(`${indent}${prefix}${icon} ${chalk.white(item)}${size}`);
+
+        // Recursively display subdirectories
+        if (isDir) {
+          displayDirectoryTree(itemPath, excludePatterns, indent + childIndent, maxDepth, currentDepth + 1);
+        }
+      } catch (err) {
+        // Skip items we can't access
+        console.log(`${indent}${prefix}${chalk.red('✗')} ${chalk.gray(item)} ${chalk.red('(access denied)')}`);
+      }
+    });
+  } catch (err: any) {
+    console.log(`${indent}${chalk.red('Error reading directory: ' + err.message)}`);
+  }
+}
+
+/**
+ * Format bytes into human-readable size
+ */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 export async function clearWatch(): Promise<void> {

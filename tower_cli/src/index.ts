@@ -8,6 +8,7 @@ import { sync, syncStatus, syncHistory, pauseSync, resumeSync } from './commands
 import { listDevices, addDevice, removeDevice, renameDevice } from './commands/devices';
 import { getConfig, setConfig, listConfig, resetConfig } from './commands/config';
 import { init } from './commands/init';
+import { get } from './commands/download';
 import { ConfigManager } from './utils/config';
 import { Logger } from './utils/logger';
 import {
@@ -100,6 +101,7 @@ watchCmd
   .description('List all watched items')
   .option('--tags <tags>', 'Filter by tags (comma-separated)')
   .option('--sort <field>', 'Sort by field (name|modified)')
+  .option('-t, --tree', 'Display as interactive tree view')
   .action((options) => {
     listWatch(options);
   });
@@ -262,6 +264,15 @@ program
   .description('Show overall status')
   .action(() => {
     syncStatus();
+  });
+
+// Get command (search and download)
+program
+  .command('get <filename>')
+  .description('Search for and download a file from a remote device')
+  .option('-d, --destination <path>', 'Destination path for the downloaded file')
+  .action(async (filename, options) => {
+    await get(filename, options.destination);
   });
 
 // Error handling
