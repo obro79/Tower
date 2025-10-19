@@ -172,8 +172,9 @@ program
 program
   .command('search <query>')
   .description('Search for files across all devices')
-  .action(async (query) => {
-    await search(query);
+  .option('-f, --fuzzy', 'Enable fuzzy search (case-insensitive, typo-tolerant)')
+  .action(async (query, options) => {
+    await search(query, options.fuzzy || false);
   });
 
 program
