@@ -4,7 +4,8 @@ import { globSync } from 'glob';
 import { ConfigManager } from '../utils/config.js';
 import { apiClient } from '../utils/api-client.js';
 import { Logger } from '../utils/logger.js';
-import { generateEmbeddingFromFile, isEmbeddingEnabled } from '../utils/embedding.js';
+import { isEmbeddingEnabled } from '../utils/embedding.js';
+import { embeddingQueue } from '../utils/embedding-queue.js';
 
 interface FileState {
   path: string;
@@ -16,7 +17,6 @@ export class SyncDaemon {
   private configManager: ConfigManager;
   private fileStates: Map<string, FileState> = new Map();
   private intervalId: NodeJS.Timeout | null = null;
-  private isRunning: boolean = false;
 
   constructor() {
     this.configManager = new ConfigManager();
@@ -33,7 +33,7 @@ export class SyncDaemon {
 
     Logger.info(`Starting sync daemon (interval: ${config.syncInterval} minutes)`);
     
-    this.isRunning = true;
+    await embeddingQueue.resume();
     await this.syncOnce();
 
     this.intervalId = setInterval(async () => {
@@ -48,7 +48,7 @@ export class SyncDaemon {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    this.isRunning = false;
+    embeddingQueue.pause();
     Logger.info('Sync daemon stopped');
   }
 
@@ -106,12 +106,7 @@ export class SyncDaemon {
         this.fileStates.set(filePath, currentState);
         
         if (isEmbeddingEnabled()) {
-          try {
-            const embedding = await generateEmbeddingFromFile(filePath);
-            await apiClient.registerEmbedding(response.file_id, embedding);
-          } catch (embError: any) {
-            Logger.warning(`Failed to generate embedding for ${path.basename(filePath)}: ${embError.message}`);
-          }
+          embeddingQueue.enqueue(filePath, response.file_id);
         }
       } catch (error: any) {
         Logger.warning(`Failed to sync ${filePath}: ${error.message}`);

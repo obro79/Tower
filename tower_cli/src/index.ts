@@ -1,13 +1,21 @@
 #!/usr/bin/env node
 
+import 'dotenv/config';
 import { Command } from 'commander';
 import { init } from './commands/init.js';
 import { addWatch, removeWatch, listWatch } from './commands/watch.js';
 import { search, semanticSearch } from './commands/search.js';
 import { get } from './commands/get.js';
 import { getRemote } from './commands/get-remote.js';
+import { embeddingQueue } from './utils/embedding-queue.js';
+
+embeddingQueue.pause();
 
 const program = new Command();
+
+program.hook('postAction', async () => {
+  await embeddingQueue.resume();
+});
 
 program
   .name('tower')

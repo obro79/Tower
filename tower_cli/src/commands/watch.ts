@@ -2,12 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import chalk from 'chalk';
 import Table from 'cli-table3';
-import inquirer from 'inquirer';
 import { ConfigManager } from '../utils/config.js';
 import { Logger } from '../utils/logger.js';
 import { WatchedItem } from '../types/index.js';
 import { apiClient } from '../utils/api-client.js';
 import { globSync } from 'glob';
+import { embeddingQueue } from '../utils/embedding-queue.js';
 
 const configManager = new ConfigManager();
 
@@ -61,6 +61,9 @@ async function registerWithBackend(filePath: string): Promise<void> {
       const metadata = apiClient.getLocalFileMetadata(filePath);
       const response = await apiClient.registerFile(metadata);
       Logger.success(`Registered with backend: ${response.file_name} (ID: ${response.file_id})`);
+      
+      embeddingQueue.enqueue(filePath, response.file_id);
+      Logger.info('File queued for embedding generation');
     } else if (stats.isDirectory()) {
       const globPattern = path.join(filePath, '**/*');
       const files = globSync(globPattern, { nodir: true });
@@ -69,7 +72,8 @@ async function registerWithBackend(filePath: string): Promise<void> {
       for (const file of files) {
         try {
           const metadata = apiClient.getLocalFileMetadata(file);
-          await apiClient.registerFile(metadata);
+          const response = await apiClient.registerFile(metadata);
+          embeddingQueue.enqueue(file, response.file_id);
           registered++;
         } catch (err: any) {
           Logger.warning(`Failed to register ${file}: ${err.message}`);
@@ -77,6 +81,7 @@ async function registerWithBackend(filePath: string): Promise<void> {
       }
       
       Logger.success(`Registered ${registered} file(s) from directory with backend`);
+      Logger.info(`${registered} file(s) queued for embedding generation`);
     }
   } catch (error: any) {
     Logger.warning(`Backend registration failed: ${error.message}`);

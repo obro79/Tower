@@ -1,28 +1,22 @@
-import { pipeline, env } from '@xenova/transformers';
+import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from './logger.js';
 
-env.allowLocalModels = false;
-env.useBrowserCache = false;
+const EMBEDDING_MODEL = 'text-embedding-3-small';
+const EMBEDDING_DIMENSION = 1536;
 
-let embeddingPipeline: any = null;
+let openaiClient: OpenAI | null = null;
 
-const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2';
-const EMBEDDING_DIMENSION = 384;
-
-async function getEmbeddingPipeline() {
-  if (!embeddingPipeline) {
-    try {
-      Logger.info('Loading embedding model (first run may take a moment)...');
-      embeddingPipeline = await pipeline('feature-extraction', MODEL_NAME);
-      Logger.info('Embedding model loaded successfully');
-    } catch (error: any) {
-      Logger.error(`Failed to load embedding model: ${error.message}`);
-      throw error;
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is not set');
     }
+    openaiClient = new OpenAI({ apiKey });
   }
-  return embeddingPipeline;
+  return openaiClient;
 }
 
 export async function generateEmbeddingFromText(text: string): Promise<number[]> {
@@ -31,14 +25,15 @@ export async function generateEmbeddingFromText(text: string): Promise<number[]>
   }
 
   try {
-    const pipe = await getEmbeddingPipeline();
+    const client = getOpenAIClient();
     
-    const output = await pipe(text, {
-      pooling: 'mean',
-      normalize: true,
+    const response = await client.embeddings.create({
+      model: EMBEDDING_MODEL,
+      input: text,
+      encoding_format: 'float',
     });
 
-    const embedding = Array.from(output.data) as number[];
+    const embedding = response.data[0].embedding;
     
     if (embedding.length !== EMBEDDING_DIMENSION) {
       throw new Error(`Expected ${EMBEDDING_DIMENSION} dimensions, got ${embedding.length}`);
