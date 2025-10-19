@@ -192,7 +192,24 @@ export class TowerAPIClient {
       ? path.join(destinationPath, file_name)
       : destinationPath;
 
-    // Build SCP command
+    // Check if this is a localhost download (same device)
+    const currentDevice = this.getDeviceInfo();
+    const isLocalhost = device_ip === currentDevice.ip ||
+                        device_ip === '127.0.0.1' ||
+                        device_ip.startsWith('10.') && currentDevice.ip.startsWith('10.');
+
+    if (isLocalhost && fs.existsSync(absolute_path)) {
+      // Local file copy instead of SCP
+      try {
+        fs.copyFileSync(absolute_path, destination);
+        console.log(`File copied locally to: ${destination}`);
+        return;
+      } catch (error: any) {
+        throw new Error(`Local file copy failed: ${error.message}`);
+      }
+    }
+
+    // Build SCP command for remote devices
     const scpCommand = `scp ${device_user}@${device_ip}:"${absolute_path}" "${destination}"`;
 
     try {

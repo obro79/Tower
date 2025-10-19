@@ -290,7 +290,7 @@ if (process.argv.length === 2) {
         // Re-parse with the selected command
         process.argv = ['node', 'tower', ...commandArgs];
         try {
-          program.parse(process.argv);
+          await program.parseAsync(process.argv);
         } catch (error: any) {
           if (error.code !== 'commander.help' && error.code !== 'commander.helpDisplayed') {
             Logger.error(error.message);
@@ -298,8 +298,9 @@ if (process.argv.length === 2) {
           }
         }
       }
+    } else {
+      process.exit(0);
     }
-    process.exit(0);
   })();
 } else {
   // Show help if help flag is used

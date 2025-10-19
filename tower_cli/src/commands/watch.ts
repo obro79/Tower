@@ -3,15 +3,11 @@ import * as path from 'path';
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import inquirer from 'inquirer';
-import fileTreeSelection from 'inquirer-file-tree-selection-prompt';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
 import { WatchedItem, WatchOptions } from '../types';
 import { apiClient } from '../utils/api-client';
 import * as glob from 'glob';
-
-// Register the file tree selection prompt
-inquirer.registerPrompt('file-tree-selection', fileTreeSelection);
 
 const configManager = new ConfigManager();
 
