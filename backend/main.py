@@ -1,10 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, Body
+from fastapi import FastAPI, Depends, HTTPException, Query, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select, or_
 from typing import List, Optional
 from pathlib import Path
 from datetime import datetime
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+import time
+import json
 
 import subprocess
 import tempfile
@@ -12,8 +16,65 @@ import shutil
 
 from models import FileRecord, FileSearchResponse
 from database import create_db_and_tables, get_session
+from logging_config import log_request_details, log_response_details, log_error_details, request_logger
 
 app = FastAPI(title="File Sync API", version="1.0.0")
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        
+        client_ip = request.client.host if request.client else "unknown"
+        method = request.method
+        path = str(request.url.path)
+        query_params = dict(request.query_params)
+        headers = dict(request.headers)
+        
+        body = None
+        if method in ["POST", "PUT", "PATCH", "DELETE"]:
+            try:
+                body_bytes = await request.body()
+                if body_bytes:
+                    body = json.loads(body_bytes.decode())
+                    
+                    async def receive():
+                        return {"type": "http.request", "body": body_bytes}
+                    
+                    request._receive = receive
+            except Exception as e:
+                request_logger.warning(f"Could not parse request body: {e}")
+        
+        log_request_details(
+            method=method,
+            path=path,
+            client_ip=client_ip,
+            headers=headers,
+            query_params=query_params,
+            body=body
+        )
+        
+        try:
+            response = await call_next(request)
+            duration_ms = (time.time() - start_time) * 1000
+            
+            log_response_details(
+                method=method,
+                path=path,
+                status_code=response.status_code,
+                duration_ms=duration_ms
+            )
+            
+            return response
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            log_error_details(
+                method=method,
+                path=path,
+                error=str(e)
+            )
+            raise
+
+app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,18 +119,19 @@ def search_files(
     Returns:
     - List of matching file metadata records
     """
-    # Convert wildcard pattern to SQL LIKE pattern
-    # * becomes % in SQL LIKE syntax
+    request_logger.info(f"ENDPOINT /files/search | query: {query}")
+    
     like_pattern = query.replace("*", "%")
     
-    # Fuzzy search on file_name (case-insensitive with LIKE)
     statement = select(FileRecord).where(FileRecord.file_name.like(f"%{like_pattern}%"))
     
     results = session.exec(statement).all()
     
     if not results:
+        request_logger.warning(f"ENDPOINT /files/search | No files found for query: {query}")
         raise HTTPException(status_code=404, detail=f"No files found matching '{query}'")
     
+    request_logger.info(f"ENDPOINT /files/search | Found {len(results)} files for query: {query}")
     return results
 
 
@@ -89,31 +151,35 @@ def get_file_metadata(file_id: int, device_ip: str = Query(..., description="IP 
     Returns:
     - Success message
     """
+    request_logger.info(f"ENDPOINT /files/{file_id} | file_id: {file_id}, device_ip: {device_ip}, destination_path: {destination_path}, device_user: {device_user}")
+    
     statement = select(FileRecord).where(FileRecord.id == file_id)
     file_record = session.exec(statement).first()
 
     if not file_record:
+        request_logger.warning(f"ENDPOINT /files/{file_id} | File not found: {file_id}")
         raise HTTPException(status_code=404, detail=f"File with ID {file_id} not found")
 
-    # Create temp directory
     temp_dir = tempfile.mkdtemp()
 
     try:
-        # SCP from source to temp
         source = f"{file_record.device_user}@{file_record.device_ip}:{file_record.absolute_path}"
         temp_file = f"{temp_dir}/{file_record.file_name}"
+        
+        request_logger.info(f"ENDPOINT /files/{file_id} | SCP from source: {source} to temp: {temp_file}")
         subprocess.run(['scp', source, temp_file], check=True)
 
-        # SCP from temp to destination
         dest = f"{device_user}@{device_ip}:{destination_path}"
+        request_logger.info(f"ENDPOINT /files/{file_id} | SCP from temp to destination: {dest}")
         subprocess.run(['scp', temp_file, dest], check=True)
 
+        request_logger.info(f"ENDPOINT /files/{file_id} | Successfully transferred file: {file_record.file_name}")
         return {"message": f"File {file_record.file_name} downloaded successfully to {dest}"}
 
     except subprocess.CalledProcessError as e:
+        request_logger.error(f"ENDPOINT /files/{file_id} | SCP failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"SCP failed: {str(e)}")
     finally:
-        # Clean up temp directory
         shutil.rmtree(temp_dir)
 
 
@@ -150,8 +216,9 @@ def register_file(
     Returns:
     - Success message with file ID
     """
+    request_logger.info(f"ENDPOINT /files/register | Payload: {file_metadata.dict()}")
+    
     try:
-        # Check if file already exists (same absolute_path + device)
         statement = select(FileRecord).where(
             FileRecord.absolute_path == file_metadata.absolute_path,
             FileRecord.device == file_metadata.device
@@ -159,18 +226,21 @@ def register_file(
         existing_file = session.exec(statement).first()
         
         if existing_file:
-            # Update existing record (keep only latest version)
+            request_logger.info(f"ENDPOINT /files/register | Updating existing file: {existing_file.id}")
+            
             existing_file.file_name = file_metadata.file_name
             existing_file.device_ip = file_metadata.device_ip
             existing_file.device_user = file_metadata.device_user
             existing_file.last_modified_time = file_metadata.last_modified_time
             existing_file.size = file_metadata.size
             existing_file.file_type = file_metadata.file_type
-            existing_file.created_time = datetime.utcnow()  # Update timestamp
+            existing_file.created_time = datetime.utcnow()
             
             session.add(existing_file)
             session.commit()
             session.refresh(existing_file)
+            
+            request_logger.info(f"ENDPOINT /files/register | Updated file ID: {existing_file.id}")
             
             return {
                 "message": "File metadata updated successfully",
@@ -179,7 +249,8 @@ def register_file(
                 "action": "updated"
             }
         else:
-            # Create new record
+            request_logger.info(f"ENDPOINT /files/register | Creating new file record")
+            
             file_record = FileRecord(
                 file_name=file_metadata.file_name,
                 absolute_path=file_metadata.absolute_path,
@@ -195,6 +266,8 @@ def register_file(
             session.commit()
             session.refresh(file_record)
             
+            request_logger.info(f"ENDPOINT /files/register | Created new file ID: {file_record.id}")
+            
             return {
                 "message": "File metadata registered successfully",
                 "file_id": file_record.id,
@@ -203,6 +276,7 @@ def register_file(
             }
     
     except Exception as e:
+        request_logger.error(f"ENDPOINT /files/register | Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error registering file metadata: {str(e)}")
 
 
@@ -220,15 +294,19 @@ def delete_file_metadata(file_id: int, session: Session = Depends(get_session)):
     Returns:
     - Success message
     """
+    request_logger.info(f"ENDPOINT /files/{file_id} DELETE | file_id: {file_id}")
+    
     statement = select(FileRecord).where(FileRecord.id == file_id)
     file_record = session.exec(statement).first()
     
     if not file_record:
+        request_logger.warning(f"ENDPOINT /files/{file_id} DELETE | File not found: {file_id}")
         raise HTTPException(status_code=404, detail=f"File with ID {file_id} not found")
     
-    # Delete only the database record (no actual file to delete on Pi)
     session.delete(file_record)
     session.commit()
+    
+    request_logger.info(f"ENDPOINT /files/{file_id} DELETE | Deleted file: {file_record.file_name} from device: {file_record.device}")
     
     return {
         "message": "File metadata deleted successfully",
