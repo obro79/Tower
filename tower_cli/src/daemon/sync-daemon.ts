@@ -5,6 +5,10 @@ import { ConfigManager } from '../utils/config.js';
 import { apiClient } from '../utils/api-client.js';
 import { Logger } from '../utils/logger.js';
 import { generateEmbeddingFromFile, isEmbeddingEnabled } from '../utils/embedding.js';
+import { ConfigManager } from '../utils/config.js';
+import { apiClient } from '../utils/api-client.js';
+import { Logger } from '../utils/logger.js';
+import { init } from '../commands/init.js';
 
 interface FileState {
   path: string;
@@ -24,15 +28,17 @@ export class SyncDaemon {
 
   async start(): Promise<void> {
     if (!this.configManager.isInitialized()) {
-      Logger.error('Tower not initialized. Run "tower init" first.');
-      return;
+      await init();
+      if (!this.configManager.isInitialized()) {
+        return;
+      }
     }
 
     const config = this.configManager.getConfig();
     const intervalMs = config.syncInterval * 60 * 1000;
 
     Logger.info(`Starting sync daemon (interval: ${config.syncInterval} minutes)`);
-    
+
     this.isRunning = true;
     await this.syncOnce();
 
@@ -61,7 +67,7 @@ export class SyncDaemon {
       }
 
       const watchList = this.configManager.getWatchList();
-      
+
       for (const item of watchList) {
         await this.syncPath(item.path);
       }
@@ -96,15 +102,15 @@ export class SyncDaemon {
 
     const previousState = this.fileStates.get(filePath);
 
-    if (!previousState || 
+    if (!previousState ||
         previousState.mtime !== currentState.mtime ||
         previousState.size !== currentState.size) {
-      
+
       try {
         const metadata = apiClient.getLocalFileMetadata(filePath);
         const response = await apiClient.registerFile(metadata);
         this.fileStates.set(filePath, currentState);
-        
+
         if (isEmbeddingEnabled()) {
           try {
             const embedding = await generateEmbeddingFromFile(filePath);
@@ -132,7 +138,7 @@ export class SyncDaemon {
 
   private async handleDeletedPath(watchedPath: string): Promise<void> {
     const keysToDelete: string[] = [];
-    
+
     for (const [filePath] of this.fileStates) {
       if (filePath === watchedPath || filePath.startsWith(watchedPath + path.sep)) {
         keysToDelete.push(filePath);
@@ -170,7 +176,7 @@ export class SyncDaemon {
 
 if (require.main === module) {
   const daemon = new SyncDaemon();
-  
+
   daemon.start();
 
   process.on('SIGINT', () => {

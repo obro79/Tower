@@ -5,6 +5,7 @@ import { ConfigManager } from '../utils/config.js';
 import { Logger } from '../utils/logger.js';
 import { apiClient, FileRecord, SemanticSearchResult } from '../utils/api-client.js';
 import { generateEmbeddingFromText, isEmbeddingEnabled } from '../utils/embedding.js';
+import { init } from './init';
 
 const configManager = new ConfigManager();
 
@@ -12,7 +13,7 @@ function isNaturalLanguageQuery(query: string): boolean {
   const hasMultipleWords = query.trim().split(/\s+/).length > 1;
   const hasNoWildcards = !query.includes('*');
   const hasNoExtension = !query.includes('.');
-  
+
   return hasMultipleWords && hasNoWildcards && hasNoExtension;
 }
 
@@ -22,8 +23,10 @@ export async function get(
 ): Promise<void> {
   try {
     if (!configManager.isInitialized()) {
-      Logger.error('Tower not initialized. Run "tower init" first.');
-      return;
+      await init();
+      if (!configManager.isInitialized()) {
+        return;
+      }
     }
 
     if (!filename) {
@@ -46,20 +49,20 @@ export async function get(
         Logger.info('For now, use filename patterns like: tower get "*.pdf" or tower get "paper"');
         return;
       }
-      
+
       Logger.info('Using semantic search for natural language query...');
-      
+
       try {
         const queryEmbedding = await generateEmbeddingFromText(filename);
         const results = await apiClient.semanticSearch(queryEmbedding, 10);
-        
+
         if (results.length === 0) {
           Logger.warning(`No files found for query: "${filename}"`);
           return;
         }
-        
+
         Logger.success(`Found ${results.length} semantically similar files`);
-        
+
         const choices = results.map((file, index) => {
           const score = (file.similarity_score * 100).toFixed(1);
           return {
@@ -79,7 +82,7 @@ export async function get(
 
         await downloadFile(answer.selectedFile, destination);
         return;
-        
+
       } catch (error: any) {
         Logger.error(`Semantic search failed: ${error.message}`);
         return;

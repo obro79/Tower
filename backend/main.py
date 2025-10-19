@@ -7,6 +7,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from difflib import SequenceMatcher
 import time
 import json
 
@@ -209,33 +210,56 @@ def get_ssh_public_key():
 @app.get("/files/search", response_model=List[FileSearchResponse])
 def search_files(
     query: str = Query(..., description="Search query for file name (supports * wildcard)"),
+    fuzzy: bool = Query(False, description="Enable fuzzy search (typo tolerance, case-insensitive)"),
     session: Session = Depends(get_session)
 ):
     """
     GET endpoint: Fuzzy search for files by name with wildcard support
-    
+
     Returns ONLY metadata - no actual files are stored on the Pi.
     Files will be retrieved via SCP from source devices when user confirms download.
-    
+
     Parameters:
     - query: The search term (supports * wildcard for fuzzy matching)
              Examples: "*.txt", "report*", "*2024*", "document.pdf"
-    
+    - fuzzy: Enable fuzzy matching (case-insensitive, typo-tolerant)
+
     Returns:
     - List of matching file metadata records
     """
-    request_logger.info(f"ENDPOINT /files/search | query: {query}")
-    
-    like_pattern = query.replace("*", "%")
-    
-    statement = select(FileRecord).where(FileRecord.file_name.like(f"%{like_pattern}%"))
-    
-    results = session.exec(statement).all()
-    
+    request_logger.info(f"ENDPOINT /files/search | query: {query}, fuzzy: {fuzzy}")
+
+    if fuzzy:
+        # Fuzzy search: fetch all files and use similarity matching
+        statement = select(FileRecord)
+        all_files = session.exec(statement).all()
+
+        query_lower = query.lower().replace("*", "")
+
+        # Calculate similarity scores
+        scored_results = []
+        for file in all_files:
+            filename_lower = file.file_name.lower()
+            similarity = SequenceMatcher(None, query_lower, filename_lower).ratio()
+
+            # Include if similarity > 0.4 (40% match)
+            if similarity > 0.4:
+                scored_results.append((similarity, file))
+
+        # Sort by similarity score (highest first)
+        scored_results.sort(reverse=True, key=lambda x: x[0])
+        results = [file for score, file in scored_results]
+
+    else:
+        # Standard wildcard search
+        like_pattern = query.replace("*", "%")
+        statement = select(FileRecord).where(FileRecord.file_name.like(f"%{like_pattern}%"))
+        results = session.exec(statement).all()
+
     if not results:
         request_logger.warning(f"ENDPOINT /files/search | No files found for query: {query}")
         raise HTTPException(status_code=404, detail=f"No files found matching '{query}'")
-    
+
     request_logger.info(f"ENDPOINT /files/search | Found {len(results)} files for query: {query}")
     return results
 

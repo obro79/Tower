@@ -8,14 +8,17 @@ import { Logger } from '../utils/logger.js';
 import { WatchedItem } from '../types/index.js';
 import { apiClient } from '../utils/api-client.js';
 import { globSync } from 'glob';
+import { init } from './init';
 
 const configManager = new ConfigManager();
 
 export async function addWatch(filePath: string): Promise<void> {
   try {
     if (!configManager.isInitialized()) {
-      Logger.error('Tower not initialized. Run "tower init" first.');
-      return;
+      await init();
+      if (!configManager.isInitialized()) {
+        return;
+      }
     }
 
     const absolutePath = path.resolve(filePath);
@@ -87,8 +90,10 @@ async function registerWithBackend(filePath: string): Promise<void> {
 export async function removeWatch(filePath: string): Promise<void> {
   try {
     if (!configManager.isInitialized()) {
-      Logger.error('Tower not initialized. Run "tower init" first.');
-      return;
+      await init();
+      if (!configManager.isInitialized()) {
+        return;
+      }
     }
 
     const absolutePath = path.resolve(filePath);

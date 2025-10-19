@@ -85,11 +85,11 @@ export class TowerAPIClient {
     }
   }
 
-  async searchFiles(query: string): Promise<FileRecord[]> {
+  async searchFiles(query: string, fuzzy: boolean = false): Promise<FileRecord[]> {
     try {
       const client = this.getClient();
       const response = await client.get<FileRecord[]>('/files/search', {
-        params: { query },
+        params: { query, fuzzy },
       });
       return response.data;
     } catch (error: any) {
