@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import inquirer from 'inquirer';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';

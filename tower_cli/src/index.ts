@@ -51,11 +51,10 @@ program
   });
 
 program
-  .command('get [filename]')
+  .command('get [filename] [destination]')
   .description('Download a file from network')
-  .option('-d, --destination <path>', 'Destination path')
-  .action(async (filename, options) => {
-    await get(filename, options.destination);
+  .action(async (filename, destination) => {
+    await get(filename, destination);
   });
 
 program
