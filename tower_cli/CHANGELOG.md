@@ -186,3 +186,91 @@
 3. PID file management for daemon
 4. Natural language search implementation
 5. `tower get-remote` full implementation
+
+---
+
+## [Unreleased] - 2025-10-19
+
+### Added - SSH Key Management System
+
+#### New file: `src/utils/ssh-setup.ts`
+- **Purpose:** Automatic SSH key installation for passwordless SCP transfers
+- **Class:** `SSHSetup` with singleton pattern (`sshSetup` export)
+- **Features:**
+  - Fetches backend's SSH public key via `GET /ssh/public-key`
+  - Installs key to `~/.ssh/authorized_keys`
+  - Adds comment marker `# tower_cli_auto_added` for easy identification
+  - Checks for duplicate keys before installation
+  - Creates SSH directory and authorized_keys file if missing
+  - Sets correct file permissions (700 for .ssh, 600 for authorized_keys)
+  - Displays key fingerprint for verification
+
+**Methods:**
+- `fetchPublicKey(backendUrl)` - GET request to backend for public key
+- `installPublicKey(publicKey, comment)` - Appends key to authorized_keys
+- `setupSSHAccess(backendUrl)` - Combined fetch + install operation
+- `removeInstalledKeys()` - Removes all tower_cli added keys (cleanup)
+- `keyAlreadyInstalled(publicKey)` - Checks if key exists in authorized_keys
+- `ensureSSHDir()` - Creates ~/.ssh if missing
+- `ensureAuthorizedKeys()` - Creates authorized_keys if missing
+
+**Response Interface:**
+```typescript
+interface SSHPublicKeyResponse {
+  public_key: string;
+  key_type: string;
+  comment: string;
+  fingerprint: string;
+}
+```
+
+#### Updated: `src/commands/init.ts`
+- **Import:** Added `sshSetup` from `../utils/ssh-setup`
+- **New step:** Calls `sshSetup.setupSSHAccess(backendUrl)` after backend URL prompt
+- **Error handling:** SSH setup failure is non-fatal (shows warning, continues)
+- **User feedback:** 
+  - Shows "Setting up SSH access for passwordless file transfers..."
+  - Displays key fingerprint on success
+  - Warns user if SSH setup fails (manual configuration needed)
+
+### Changed
+
+- **init.ts workflow:** Now includes SSH key installation step before saving config
+- **SSH key location:** Backend key installed to `~/.ssh/authorized_keys` on client
+
+### Technical Details
+
+#### SSH Key Flow
+1. User runs `tower init`
+2. CLI prompts for backend URL and sync interval
+3. CLI calls `GET http://<backend>/ssh/public-key`
+4. Backend responds with ed25519 public key + fingerprint
+5. CLI appends key to `~/.ssh/authorized_keys` with tower_cli marker
+6. Backend can now SCP to/from this device without password
+7. Config saved to `~/.tower/config.json`
+
+#### Security Considerations
+- Public key only (no private key exchange)
+- Keys marked with comment for traceability
+- Duplicate detection prevents key accumulation
+- Non-fatal failure (user can manually configure SSH)
+- StrictHostKeyChecking=no in backend (auto-accepts host keys)
+
+### Files Modified
+- Created `src/utils/ssh-setup.ts` - SSH key installation utility
+- Updated `src/commands/init.ts` - Added SSH setup step
+- Updated `CHANGELOG.md` - This file
+
+### Dependencies
+No new dependencies. Uses existing:
+- `axios` - HTTP request to backend
+- `fs` - File system operations
+- `os` - Home directory detection
+- `path` - Path manipulation
+
+### Testing Instructions
+1. Run `tower init` with backend URL
+2. Check `~/.ssh/authorized_keys` for tower_cli marker
+3. Verify backend can SSH to device: `ssh user@device-ip "echo test"`
+4. Verify SCP works: `scp user@device-ip:/path/to/file ./test`
+

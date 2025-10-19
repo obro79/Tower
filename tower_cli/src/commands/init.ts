@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
+import { sshSetup } from '../utils/ssh-setup';
 
 const configManager = new ConfigManager();
 
@@ -54,6 +55,18 @@ export async function init(): Promise<void> {
         validate: (input) => input > 0 || 'Must be greater than 0'
       }
     ]);
+
+    console.log();
+    Logger.info('Setting up SSH access for passwordless file transfers...');
+    
+    try {
+      await sshSetup.setupSSHAccess(answers.backendUrl);
+      console.log();
+    } catch (error: any) {
+      Logger.warning(`SSH setup failed: ${error.message}`);
+      Logger.warning('You may need to manually configure SSH keys for file transfers');
+      console.log();
+    }
 
     configManager.initialize(
       answers.backendUrl,
