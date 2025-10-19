@@ -181,9 +181,10 @@ program
       await init();
       process.exit(0);
     } else {
-      // Show interactive menu when no command is provided
-      await showInteractiveMenu();
-      process.exit(0);
+      // Show interactive menu in a loop until user exits
+      while (true) {
+        await showInteractiveMenu();
+      }
     }
   } else {
     program.parse(process.argv);
