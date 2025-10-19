@@ -1,37 +1,48 @@
-from sqlmodel import SQLModel, Field
-from datetime import datetime
-from typing import Optional
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, UniqueConstraint
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-class FileEntry(SQLModel, table=True):
-    """
-    Database model for tracking file metadata across devices.
-    The Pi does NOT store actual files, only metadata.
-    Files are retrieved via SCP from source devices on-demand.
-    """
-    id: Optional[int] = Field(default=None, primary_key=True)
-    file_name: str = Field(index=True)  # Original file name (for searching)
-    absolute_path: str  # Full absolute path on the source device
-    device: str = Field(index=True)  # Device/computer name (hostname)
-    device_ip: str  # IP address of the device for SCP retrieval
-    last_modified_time: datetime  # Last modification time of the file
-    created_time: datetime  # When record was created in DB
-    size: int  # File size in bytes
-    file_type: str  # File extension or MIME type
-      
-      
-    class Config:
-        from_attributes = True
 
-class FileSearchResponse(SQLModel):
+class File(Base):
     """
-    Response model for file search results
+    File metadata model.
+    
+    Attributes:
+        id: Primary key
+        filename: Filename
+        device: Device identifier (e.g., 'client_a', 'client_b')
+        path: Unique file path on the storage system
+        alias: Owner/uploader identifier
+        size: File size in bytes
+        uploaded_at: Timestamp when file was uploaded
+        modified_at: Last modification timestamp
+        file_type: File extension/type (e.g., 'txt', 'pdf', 'jpg')
     """
-    id: int
-    file_name: str
-    absolute_path: str
-    device: str
-    device_ip: str
-    last_modified_time: datetime
-    created_time: datetime
-    size: int
-    file_type: str
+    __tablename__ = 'files'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    filename = Column(String, nullable=False, index=True)
+    device = Column(String, nullable=False)
+    path = Column(String, unique=True, nullable=False)
+    alias = Column(String, nullable=False, index=True)
+    size = Column(Integer, nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    modified_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    file_type = Column(String, nullable=True)
+    
+    def __repr__(self):
+        return f"<File(id={self.id}, filename='{self.filename}', alias='{self.alias}', size={self.size})>"
+    
+    def to_dict(self):
+        """Convert file object to dictionary."""
+        return {
+            'id': self.id,
+            'filename': self.filename,
+            'device': self.device,
+            'path': self.path,
+            'alias': self.alias,
+            'size': self.size,
+            'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None,
+            'modified_at': self.modified_at.isoformat() if self.modified_at else None,
+            'file_type': self.file_type
+        }
