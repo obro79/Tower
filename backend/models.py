@@ -18,6 +18,7 @@ class File(SQLModel, table=True):
         modified_at: Last modification timestamp
         file_type: File extension/type (e.g., 'txt', 'pdf', 'jpg')
     """
+    __tablename__ = "files"
     
     id: Optional[int] = Field(default=None, primary_key=True)
     filename: str = Field(index=True)
