@@ -3,14 +3,17 @@ import Table from 'cli-table3';
 import { ConfigManager } from '../utils/config';
 import { Logger } from '../utils/logger';
 import { apiClient } from '../utils/api-client';
+import { init } from './init';
 
 const configManager = new ConfigManager();
 
-export async function search(query: string): Promise<void> {
+export async function search(query: string, fuzzy: boolean = false): Promise<void> {
   try {
     if (!configManager.isInitialized()) {
-      Logger.error('Tower not initialized. Run "tower init" first.');
-      return;
+      await init();
+      if (!configManager.isInitialized()) {
+        return;
+      }
     }
 
     const isBackendRunning = await apiClient.healthCheck();
@@ -20,10 +23,11 @@ export async function search(query: string): Promise<void> {
       return;
     }
 
-    Logger.info(`Searching backend registry for: "${query}"`);
+    const searchMode = fuzzy ? 'fuzzy' : 'wildcard';
+    Logger.info(`Searching backend registry for: "${query}" (${searchMode} mode)`);
 
     const searchQuery = query.includes('*') ? query : `*${query}*`;
-    const results = await apiClient.searchFiles(searchQuery);
+    const results = await apiClient.searchFiles(searchQuery, fuzzy);
 
     if (results.length === 0) {
       Logger.info(`No results found for: "${query}"`);

@@ -4,6 +4,7 @@ import { globSync } from 'glob';
 import { ConfigManager } from '../utils/config';
 import { apiClient } from '../utils/api-client';
 import { Logger } from '../utils/logger';
+import { init } from '../commands/init';
 
 interface FileState {
   path: string;
@@ -23,8 +24,10 @@ export class SyncDaemon {
 
   async start(): Promise<void> {
     if (!this.configManager.isInitialized()) {
-      Logger.error('Tower not initialized. Run "tower init" first.');
-      return;
+      await init();
+      if (!this.configManager.isInitialized()) {
+        return;
+      }
     }
 
     const config = this.configManager.getConfig();
