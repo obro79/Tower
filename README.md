@@ -18,6 +18,7 @@ Perfect for:
 - Privacy-conscious users who want control over their data
 
 ![Tower CLI Interface](./assets/tower-cli-screenshot.png)
+
 *Tower's interactive command-line interface*
 
 ---
